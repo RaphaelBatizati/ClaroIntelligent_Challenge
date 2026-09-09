@@ -1,0 +1,17 @@
+{
+  "name": "clarointelligence-api",
+  "version": "1.0.0",
+  "description": "ClaroIntelligence MVP Backend – Sprint 3",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "server": "node --experimental-sqlite src/server.js",
+    "seed": "node --experimental-sqlite src/seed.js",
+    "dev": "node --experimental-sqlite --watch src/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "uuid": "^11.1.0"
+  }
+}
