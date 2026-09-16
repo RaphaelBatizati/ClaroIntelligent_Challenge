@@ -115,6 +115,115 @@ O núcleo do ClaroMemory: um resumo curto por interação, recuperável por até
 ### `personas_config`
 Linha única (`id = 1`) com os limiares editáveis pela tela "Gestão de Personas" do painel — permite calibrar sensibilidade sem alterar código.
 
+---
+
+## Tabelas de protocolo, segurança e atendimento
+
+### `protocolos`
+O número que o cliente informa em qualquer canal, exigido pela Anatel (Res. 765/2023). É a âncora
+formal da continuidade entre canais e o registro de **quem resolveu** a demanda.
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `numero` | TEXT (PK) | `AAAAMMDD` + sequencial de 6 dígitos, ex: `20260915000042` |
+| `cliente_id` | TEXT (FK) | titular — usado para negar consulta a protocolo de terceiro |
+| `sessao_id` | TEXT (FK) | sessão que originou o protocolo |
+| `canal_origem` / `canal_atual` | TEXT | a diferença entre os dois é o que revela a jornada multicanal |
+| `tipo` | TEXT | `atendimento` \| `reclamacao` \| `solicitacao` \| `cancelamento` — tipificação regulatória |
+| `assunto` | TEXT | legível, derivado da intenção ("Cobrança divergente na fatura") |
+| `status` | TEXT | `aberto` \| `em_andamento` \| `transferido` \| `resolvido` |
+| `resolvido_por` | TEXT | `autoatendimento` \| `atendente_humano` — base da taxa de contenção |
+| `score_atrito_final` | REAL | atrito no momento do encerramento |
+
+### `protocolo_eventos`
+Linha do tempo auditável do protocolo. Cada passo relevante (abertura, verificação 2FA,
+desambiguação, transferência, encerramento) grava um evento com canal e descrição — é o que o
+atendente lê no Console antes de falar, e o que o cliente vê ao consultar o protocolo.
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `protocolo_numero` | TEXT (FK) | |
+| `canal` | TEXT | onde o evento aconteceu |
+| `tipo` | TEXT | `abertura` \| `verificacao` \| `diagnostico` \| `transferencia` \| `retomada` \| `encerramento` |
+| `descricao` | TEXT | texto legível por humano |
+
+### `verificacoes`
+Desafios de verificação em duas etapas. **O código nunca é armazenado em texto puro.**
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `codigo_hash` | TEXT | SHA-256 do código com salt — a comparação usa `timingSafeEqual` |
+| `destino_mascarado` | TEXT | `(11) *****-4321` — o número completo não é repetido aqui |
+| `motivo` | TEXT | intenção que exigiu o segundo fator; usada para **retomar** o fluxo após validar |
+| `tentativas` / `max_tentativas` | INTEGER | bloqueia em 3 tentativas |
+| `status` | TEXT | `pendente` \| `validado` \| `expirado` \| `bloqueado` |
+| `expira_em` | TEXT | 5 minutos após a criação |
+
+### `fila_atendimento`
+Estado do transbordo para humano.
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `prioridade` | TEXT | `alta` (score ≥ 80 ou cancelamento) \| `media` \| `baixa` |
+| `status` | TEXT | `aguardando` \| `em_atendimento` \| `encerrado` |
+| `atendente_nome` | TEXT | quem assumiu |
+| `resumo_contexto` | TEXT | JSON com persona, produto, sinais e últimas falas — o briefing que evita o cliente repetir |
+| `entrou_em` / `iniciado_em` / `encerrado_em` | TEXT | permitem medir espera e duração |
+
+A **posição na fila não é armazenada**: é calculada na consulta, ordenando por prioridade e depois
+por ordem de chegada. Guardar posição seria denormalizar um dado que muda a cada entrada e saída.
+
+### `eventos_seguranca`
+Auditoria dos guardrails e das falhas de 2FA.
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `tipo` | TEXT | `prompt_injection` \| `extracao_dados` \| `engenharia_social` \| `fora_escopo` \| `falha_2fa` |
+| `severidade` | TEXT | `baixa` \| `media` \| `alta` |
+| `padrao_detectado` | TEXT | qual regra disparou, ex: `sql_injection` |
+| `trecho` | TEXT | **truncado em 120 caracteres e já redigido** — o log de segurança não pode virar vazamento |
+| `acao` | TEXT | `bloqueado` \| `redirecionado` \| `monitorado` |
+
+### `persona_dicionario`
+Léxico editável que alimenta o Persona Engine. Tirar isso do código é o que permite à equipe de
+atendimento cadastrar uma gíria nova sem deploy.
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `persona` | TEXT | `digital` \| `intermediario` \| `assistido` \| `informal` |
+| `termo` | TEXT | sempre em minúsculas |
+| `categoria` | TEXT | `tecnico` \| `ajuda` \| `giria` \| `formal` \| `personalizado` |
+| `peso` | INTEGER | quanto o termo soma para a persona |
+| `ativo` | INTEGER | desativar sem apagar — preserva o histórico da calibração |
+
+### `acoes_autoatendimento`
+Ações transacionais propostas e executadas no chat.
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `tipo` | TEXT | `pagamento` \| `upgrade_plano` |
+| `detalhe` | TEXT | JSON com o que foi proposto e, após execução, o comprovante |
+| `valor` | REAL | |
+| `status` | TEXT | `proposta` → `confirmada` \| `descartada` |
+
+O ciclo `proposta` → `confirmada` é o que permite ao cliente responder só "pode ser" no turno
+seguinte sem o sistema perder o que estava sendo tratado.
+
+### Colunas acrescentadas às tabelas existentes
+
+| Tabela | Coluna | Para quê |
+|---|---|---|
+| `sessoes` | `protocolo_numero`, `verificado`, `risco_churn` | vincular protocolo, marcar 2FA validado, guardar o churn calculado |
+| `clientes` | `tipo_pessoa`, `cnpj_mascara`, `segmento` | suportar cliente PJ (Claro Empresas) |
+| `produtos_catalogo` | `segmento`, `valor_referencia`, `franquia_gb`, `velocidade_mbps`, `tipo_chip`, `beneficios` | descrever o produto real e alimentar a matriz de capacidades |
+| `mensagens` | `protocolo_numero`, `bloqueado_guardrail` | rastrear por protocolo e marcar mensagens bloqueadas |
+| `intervencoes` | `protocolo_numero` | ligar a intervenção ao protocolo |
+
+Essas colunas são adicionadas por uma rotina de migração idempotente em
+[`database.js`](../clarointelligence-api/src/database.js): `CREATE TABLE IF NOT EXISTS` não altera
+tabela existente, então a função `migrate()` checa `PRAGMA table_info` antes de cada `ALTER TABLE`.
+É o que permite atualizar um banco já criado sem apagá-lo.
+
 ## Convenções do esquema
 
 - **IDs são UUID v4 em texto**, gerados na aplicação (`uuid` npm package), não `AUTOINCREMENT` — facilita gerar dados de seed determinísticos e evita vazar contagem de linhas.

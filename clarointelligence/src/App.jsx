@@ -7,6 +7,7 @@ import LogClaroSense from './pages/LogClaroSense'
 import GestaoPersonas from './pages/GestaoPersonas'
 import PerfisUsuario from './pages/PerfisUsuario'
 import ChatCliente from './pages/ChatCliente'
+import ConsoleAtendente from './pages/ConsoleAtendente'
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
           <Route path="gestao-personas" element={<GestaoPersonas />} />
           <Route path="perfis-usuario" element={<PerfisUsuario />} />
           <Route path="chat" element={<ChatCliente />} />
+          <Route path="console-atendente" element={<ConsoleAtendente />} />
           <Route path="configuracoes" element={
             <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
               Configurações — em desenvolvimento

@@ -1,7 +1,70 @@
 const { Router } = require('express')
 const { getDb } = require('../database')
+const autoatendimento = require('../services/autoatendimento')
+const fila = require('../services/fila')
 
 const router = Router()
+
+/**
+ * Taxa de contenção — o indicador que importa para o negócio:
+ * quantas demandas se resolveram sem custo de atendente humano.
+ * Diferente dos demais KPIs desta tela, este vem 100% de dado real do banco.
+ */
+router.get('/contencao', (_req, res) => {
+  try {
+    const db = getDb()
+    const metricas = autoatendimento.metricas()
+
+    const porCanal = db.prepare(`
+      SELECT canal_origem as canal,
+             SUM(CASE WHEN resolvido_por = 'autoatendimento' THEN 1 ELSE 0 END) as autoatendimento,
+             SUM(CASE WHEN resolvido_por = 'atendente_humano' THEN 1 ELSE 0 END) as humano,
+             COUNT(*) as total
+      FROM protocolos GROUP BY canal_origem
+    `).all()
+
+    const protocolos = db.prepare(`
+      SELECT status, COUNT(*) as total FROM protocolos GROUP BY status
+    `).all()
+
+    res.json({ ...metricas, por_canal: porCanal, protocolos_por_status: protocolos, fila: fila.metricas() })
+  } catch (err) {
+    res.status(500).json({ erro: 'Falha ao calcular contenção' })
+  }
+})
+
+/** Sinais de atrito agregados — alimenta o painel do ClaroSense com dado real. */
+router.get('/sinais', (_req, res) => {
+  try {
+    const db = getDb()
+    const porTipo = db.prepare(`
+      SELECT tipo, COUNT(*) as total, SUM(valor) as peso_total
+      FROM sinais_atrito GROUP BY tipo ORDER BY total DESC
+    `).all()
+
+    const intervencoes = db.prepare(`
+      SELECT tipo, COUNT(*) as total FROM intervencoes GROUP BY tipo ORDER BY total DESC
+    `).all()
+
+    const log = db.prepare(`
+      SELECT s.tipo, s.valor, s.created_at, ses.canal, c.nome as cliente_nome, ses.protocolo_numero, ses.score_atrito
+      FROM sinais_atrito s
+      JOIN sessoes ses ON s.sessao_id = ses.id
+      JOIN clientes c ON ses.cliente_id = c.id
+      ORDER BY s.created_at DESC LIMIT 40
+    `).all()
+
+    const churn = db.prepare(`
+      SELECT c.nome as cliente_nome, s.canal, s.score_atrito, s.risco_churn, s.protocolo_numero, s.status
+      FROM sessoes s JOIN clientes c ON s.cliente_id = c.id
+      WHERE s.risco_churn >= 30 ORDER BY s.risco_churn DESC LIMIT 10
+    `).all()
+
+    res.json({ por_tipo: porTipo, intervencoes, log, clientes_em_risco: churn })
+  } catch (err) {
+    res.status(500).json({ erro: 'Falha ao carregar sinais' })
+  }
+})
 
 router.get('/kpis', (req, res) => {
   const db = getDb()

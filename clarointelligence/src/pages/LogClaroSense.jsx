@@ -1,142 +1,330 @@
-import { Brain, Users, TrendingDown, Sliders } from 'lucide-react'
+import { useState, useEffect } from 'react'
 import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Cell,
-} from 'recharts'
-import KPICard from '../components/KPICard'
-import ChartCard from '../components/ChartCard'
+  Brain, Users, TrendingDown, Shield, AlertTriangle, ArrowRight, Repeat,
+  MessageSquareWarning, UserX, Flame, Radio, CheckCircle,
+} from 'lucide-react'
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts'
+import { api } from '../services/api'
 
-const intervencoes = [
-  { tipo: 'Atendimento humano', valor: 847, cor: '#F59E0B' },
-  { tipo: 'Simplificação', valor: 612, cor: '#3B82F6' },
-  { tipo: 'Mudança de canal', valor: 489, cor: '#10B981' },
-  { tipo: 'Antecipação', valor: 341, cor: '#8B5CF6' },
-]
-
-const LOGS = [
-  { hora: '14:22', canal: 'WhatsApp', sinal: 'Repetição de intenção', acao: 'Transferência para humano', resultado: 'Resolvido' },
-  { hora: '14:19', canal: 'App', sinal: 'Silêncio prolongado', acao: 'Simplificação de fluxo', resultado: 'Resolvido' },
-  { hora: '14:16', canal: 'Site', sinal: 'Mudança de canal', acao: 'Recuperação de contexto', resultado: 'Resolvido' },
-  { hora: '14:13', canal: 'Call Center', sinal: 'Tom negativo detectado', acao: 'Oferta preventiva', resultado: 'Resolvido' },
-  { hora: '14:11', canal: 'WhatsApp', sinal: 'Intenção de cancelamento', acao: 'Especialista de retenção', resultado: 'Retido' },
-  { hora: '14:08', canal: 'App', sinal: 'Abandono de funil', acao: 'Gatilho de recuperação', resultado: 'Resolvido' },
-  { hora: '14:05', canal: 'Site', sinal: 'Respostas monossilábicas', acao: 'Adaptação de persona', resultado: 'Em andamento' },
-  { hora: '14:02', canal: 'WhatsApp', sinal: 'Repetição de intenção', acao: 'Escalamento N2', resultado: 'Resolvido' },
-  { hora: '13:58', canal: 'App', sinal: 'Tempo de resolução alto', acao: 'Antecipação de resposta', resultado: 'Resolvido' },
-  { hora: '13:55', canal: 'Call Center', sinal: 'NPS negativo previsto', acao: 'Alerta para atendente', resultado: 'Retido' },
-  { hora: '13:51', canal: 'Site', sinal: 'Mudança de canal', acao: 'Handoff com contexto', resultado: 'Resolvido' },
-  { hora: '13:48', canal: 'WhatsApp', sinal: 'Silêncio prolongado', acao: 'Mensagem proativa', resultado: 'Resolvido' },
-]
-
-const CANAL_BADGE = {
-  WhatsApp: { bg: '#F0FDF4', color: '#16A34A' },
-  App: { bg: '#EFF6FF', color: '#2563EB' },
-  Site: { bg: '#F5F3FF', color: '#7C3AED' },
-  'Call Center': { bg: '#FFF1F2', color: '#E8002A' },
+const ICONE_SINAL = {
+  repeticao_intencao: Repeat,
+  monossilabico: MessageSquareWarning,
+  sentimento_negativo: MessageSquareWarning,
+  tom_agressivo: Flame,
+  solicita_humano: UserX,
+  intencao_cancelamento: TrendingDown,
+  recontato_multicanal: Radio,
 }
 
-const RESULT_BADGE = {
-  Resolvido: { bg: '#F0FDF4', color: '#16A34A' },
-  Retido: { bg: '#EFF6FF', color: '#2563EB' },
-  'Em andamento': { bg: '#FEF3C7', color: '#D97706' },
+const COR_SINAL = {
+  repeticao_intencao: '#F59E0B',
+  monossilabico: '#94A3B8',
+  sentimento_negativo: '#F97316',
+  tom_agressivo: '#EF4444',
+  solicita_humano: '#8B5CF6',
+  intencao_cancelamento: '#DC2626',
+  recontato_multicanal: '#3B82F6',
 }
 
-const CustomTip = ({ active, payload }) => {
-  if (!active || !payload?.length) return null
+const NIVEL_CHURN = {
+  baixo: { cor: '#10B981', label: 'Baixo' },
+  moderado: { cor: '#F59E0B', label: 'Moderado' },
+  alto: { cor: '#F97316', label: 'Alto' },
+  critico: { cor: '#EF4444', label: 'Crítico' },
+}
+
+function nivelChurnDe(p) {
+  if (p >= 80) return 'critico'
+  if (p >= 60) return 'alto'
+  if (p >= 30) return 'moderado'
+  return 'baixo'
+}
+
+function KPI({ label, valor, sub, cor, icon: Icon }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-3 text-xs">
-      <p className="font-semibold text-gray-700 mb-1">{payload[0]?.payload?.tipo}</p>
-      <p style={{ color: payload[0]?.payload?.cor }}>{payload[0]?.value} intervenções</p>
+    <div className="bg-white rounded-xl p-4 shadow-sm">
+      <div className="flex items-start justify-between mb-2">
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${cor}15` }}>
+          <Icon size={16} style={{ color: cor }} />
+        </div>
+      </div>
+      <div className="text-2xl font-black text-gray-800 leading-none">{valor}</div>
+      <div className="text-[11px] text-gray-500 mt-1">{label}</div>
+      {sub && <div className="text-[10px] text-gray-400 mt-0.5">{sub}</div>}
     </div>
   )
 }
 
-function LogClaroSense() {
+/**
+ * Explicação da régua — o ponto central do painel.
+ * Mostra, com os pesos reais do motor, como repetição e agressividade
+ * empurram o score até o transbordo e o risco de cancelamento.
+ */
+function ComoFuncionaScore({ catalogo, limiares }) {
+  const [exemplo, setExemplo] = useState(0)
+
+  // Escalada didática, com os mesmos pesos que o backend aplica
+  const escalada = [
+    { turno: 1, fala: '"minha internet está lenta"', sinais: [], score: 0 },
+    { turno: 2, fala: '"já tentei isso, não adianta"', sinais: ['repeticao_intencao', 'sentimento_negativo'], score: 50 },
+    { turno: 3, fala: '"ISSO É UM ABSURDO! vou no PROCON"', sinais: ['tom_agressivo'], score: 85 },
+    { turno: 4, fala: '"quero cancelar tudo"', sinais: ['intencao_cancelamento', 'solicita_humano'], score: 100 },
+  ]
+  const atual = escalada[exemplo]
+  const churnEstimado = Math.min(Math.round(atual.score * 0.7 + (atual.sinais.includes('intencao_cancelamento') ? 25 : 0) + (atual.sinais.includes('tom_agressivo') ? 15 : 0)), 100)
+  const nivelChurn = NIVEL_CHURN[nivelChurnDe(churnEstimado)]
+
   return (
-    <div className="space-y-5">
-      {/* KPIs */}
-      <div className="grid grid-cols-4 gap-4">
-        <KPICard label="Intervenções Hoje" value="94" numericValue={94} delta="+7" deltaType="positive" icon={Brain} accentColor="#8B5CF6" />
-        <KPICard label="Atendimento Humano Ativado" value="1.243" numericValue={1243} delta="-12,4%" deltaType="positive" icon={Users} accentColor="#F59E0B" subtitle="Redução vs. período anterior" />
-        <KPICard label="Churn Evitado (estimado)" value="2.391" numericValue={2391} delta="+23,1%" deltaType="positive" icon={TrendingDown} accentColor="#10B981" />
-        <KPICard label="Adaptações Persona Engine" value="19.430" numericValue={19430} delta="+34,8%" deltaType="positive" icon={Sliders} accentColor="#3B82F6" />
+    <div className="bg-white rounded-xl p-5 shadow-sm">
+      <div className="flex items-center gap-2 mb-1">
+        <Brain size={16} className="text-[#E8002A]" />
+        <h3 className="text-sm font-semibold text-gray-900">Como o score de atrito vira risco de cancelamento</h3>
+      </div>
+      <p className="text-[11px] text-gray-500 leading-relaxed mb-4 max-w-3xl">
+        Cada sinal detectado soma um peso fixo ao score da sessão — a régua é determinística e auditável, não uma caixa-preta.
+        <strong className="text-gray-700"> Repetir o mesmo pedido</strong> e <strong className="text-gray-700">escalar o tom </strong>
+        são justamente os comportamentos que antecedem o pedido de cancelamento, por isso têm os pesos mais altos.
+        Quando o score cruza {limiares?.transbordo ?? 80}, o sistema para de insistir no bot e leva o cliente para um humano.
+      </p>
+
+      {/* Régua de pesos */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-5">
+        {catalogo?.map(s => {
+          const Icon = ICONE_SINAL[s.tipo] || AlertTriangle
+          const cor = COR_SINAL[s.tipo] || '#6B7280'
+          return (
+            <div key={s.tipo} className="rounded-lg p-2.5 border" style={{ backgroundColor: `${cor}08`, borderColor: `${cor}25` }}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <Icon size={12} style={{ color: cor }} />
+                <span className="text-[10px] font-bold flex-1 leading-tight" style={{ color: cor }}>{s.rotulo}</span>
+                <span className="text-[11px] font-black" style={{ color: cor }}>+{s.peso}</span>
+              </div>
+              <p className="text-[9px] text-gray-500 leading-snug">{s.explicacao}</p>
+            </div>
+          )
+        })}
       </div>
 
-      <div className="grid grid-cols-5 gap-4">
-        {/* Chart */}
-        <ChartCard title="Intervenções por Tipo" subtitle="Acumulado no período" className="col-span-2">
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={intervencoes} barSize={36}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
-              <XAxis dataKey="tipo" tick={{ fontSize: 9, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
-              <Tooltip content={<CustomTip />} />
-              <Bar dataKey="valor" radius={[5, 5, 0, 0]}>
-                {intervencoes.map((d, i) => (
-                  <Cell key={i} fill={d.cor} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {intervencoes.map((d) => (
-              <div key={d.tipo} className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: `${d.cor}12` }}>
-                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: d.cor }} />
-                <span className="text-[10px] text-gray-600 flex-1 truncate">{d.tipo}</span>
-                <span className="text-[10px] font-bold" style={{ color: d.cor }}>{d.valor}</span>
-              </div>
-            ))}
-          </div>
-        </ChartCard>
+      {/* Simulação da escalada */}
+      <div className="bg-gray-50 rounded-xl p-4">
+        <div className="text-[10px] font-bold text-gray-400 uppercase mb-3">Escalada de uma conversa real</div>
 
-        {/* Log table */}
-        <ChartCard title="Log de Intervenções" subtitle="Tempo real · atualizado a cada 30s" className="col-span-3">
-          <div className="overflow-y-auto" style={{ maxHeight: '320px' }}>
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-white">
-                <tr className="border-b border-gray-100">
-                  <th className="text-left pb-2 text-gray-400 font-semibold">Horário</th>
-                  <th className="text-left pb-2 text-gray-400 font-semibold">Canal</th>
-                  <th className="text-left pb-2 text-gray-400 font-semibold">Sinal Detectado</th>
-                  <th className="text-left pb-2 text-gray-400 font-semibold">Ação Tomada</th>
-                  <th className="text-center pb-2 text-gray-400 font-semibold">Resultado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {LOGS.map((log, i) => {
-                  const canal = CANAL_BADGE[log.canal] || { bg: '#F9FAFB', color: '#6B7280' }
-                  const res = RESULT_BADGE[log.resultado] || { bg: '#F9FAFB', color: '#6B7280' }
+        <div className="flex gap-1.5 mb-4">
+          {escalada.map((e, i) => (
+            <button key={i} onClick={() => setExemplo(i)}
+              className={`flex-1 text-left p-2 rounded-lg border transition-all ${exemplo === i ? 'bg-white border-gray-900 shadow-sm' : 'bg-white/50 border-transparent hover:bg-white'}`}>
+              <div className="text-[9px] text-gray-400 uppercase font-bold">Turno {e.turno}</div>
+              <div className="text-[10px] text-gray-600 leading-snug mt-0.5 line-clamp-2">{e.fala}</div>
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 items-center">
+          {/* Sinais do turno */}
+          <div>
+            <div className="text-[9px] font-bold text-gray-400 uppercase mb-1.5">Sinais detectados</div>
+            {atual.sinais.length === 0 ? (
+              <span className="text-[10px] text-gray-400 italic">Nenhum — conversa saudável</span>
+            ) : (
+              <div className="space-y-1">
+                {atual.sinais.map(t => {
+                  const def = catalogo?.find(c => c.tipo === t)
+                  const Icon = ICONE_SINAL[t] || AlertTriangle
                   return (
-                    <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                      <td className="py-2.5 pr-3 font-mono text-gray-400">{log.hora}</td>
-                      <td className="py-2.5 pr-3">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: canal.bg, color: canal.color }}>
-                          {log.canal}
-                        </span>
-                      </td>
-                      <td className="py-2.5 pr-3 text-gray-700">{log.sinal}</td>
-                      <td className="py-2.5 pr-3 text-gray-600">{log.acao}</td>
-                      <td className="py-2.5 text-center">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: res.bg, color: res.color }}>
-                          {log.resultado}
-                        </span>
-                      </td>
-                    </tr>
+                    <div key={t} className="flex items-center gap-1.5 text-[10px] font-semibold" style={{ color: COR_SINAL[t] }}>
+                      <Icon size={10} /> {def?.rotulo || t} <span className="ml-auto">+{def?.peso}</span>
+                    </div>
                   )
                 })}
-              </tbody>
-            </table>
+              </div>
+            )}
           </div>
-        </ChartCard>
+
+          {/* Score acumulado */}
+          <div className="text-center">
+            <div className="text-[9px] font-bold text-gray-400 uppercase mb-1">Score acumulado</div>
+            <div className="text-4xl font-black leading-none"
+              style={{ color: atual.score >= 80 ? '#EF4444' : atual.score >= 65 ? '#F59E0B' : atual.score >= 40 ? '#F97316' : '#10B981' }}>
+              {atual.score}
+            </div>
+            <div className="h-2 bg-gray-200 rounded-full overflow-hidden mt-2 relative">
+              <div className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${atual.score}%`, backgroundColor: atual.score >= 80 ? '#EF4444' : atual.score >= 65 ? '#F59E0B' : atual.score >= 40 ? '#F97316' : '#10B981' }} />
+              <div className="absolute top-0 h-full w-px bg-gray-400" style={{ left: `${limiares?.transbordo ?? 80}%` }} />
+            </div>
+            <div className="text-[9px] text-gray-400 mt-1">transbordo em {limiares?.transbordo ?? 80}</div>
+          </div>
+
+          {/* Risco de churn resultante */}
+          <div className="text-center">
+            <div className="text-[9px] font-bold text-gray-400 uppercase mb-1">Risco de cancelamento</div>
+            <div className="text-4xl font-black leading-none" style={{ color: nivelChurn.cor }}>{churnEstimado}%</div>
+            <span className="inline-block mt-2 text-[9px] font-bold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: nivelChurn.cor }}>
+              {nivelChurn.label.toUpperCase()}
+            </span>
+          </div>
+        </div>
+
+        {atual.score >= 80 && (
+          <div className="mt-3 pt-3 border-t border-gray-200 flex items-center gap-2 text-[11px] text-red-600 font-semibold">
+            <ArrowRight size={13} />
+            Intervenção automática: transferência para fila prioritária com contexto completo, antes que o cliente peça o cancelamento.
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-export default LogClaroSense
+export default function LogClaroSense() {
+  const [sinais, setSinais] = useState(null)
+  const [catalogo, setCatalogo] = useState(null)
+  const [limiares, setLimiares] = useState(null)
+  const [contencao, setContencao] = useState(null)
+  const [seguranca, setSeguranca] = useState(null)
+  const [erro, setErro] = useState(null)
+
+  useEffect(() => {
+    Promise.all([
+      api.sinais(), api.sinaisCatalogo(), api.contencao(), api.segurancaResumo(),
+    ])
+      .then(([s, cat, cont, seg]) => {
+        setSinais(s); setCatalogo(cat.sinais); setLimiares(cat.limiares)
+        setContencao(cont); setSeguranca(seg); setErro(null)
+      })
+      .catch(() => setErro('API offline — inicie o backend com npm run server'))
+  }, [])
+
+  const dadosGrafico = (sinais?.por_tipo || []).map(s => ({
+    tipo: catalogo?.find(c => c.tipo === s.tipo)?.rotulo || s.tipo.replace(/_/g, ' '),
+    total: s.total,
+    cor: COR_SINAL[s.tipo] || '#6B7280',
+  }))
+
+  return (
+    <div className="space-y-4">
+      {erro && <div className="bg-red-50 border border-red-200 text-red-600 text-xs rounded-lg px-3 py-2">{erro}</div>}
+
+      {/* KPIs */}
+      <div className="grid grid-cols-4 gap-4">
+        <KPI label="Sinais de atrito detectados" valor={sinais?.por_tipo?.reduce((a, s) => a + s.total, 0) ?? 0}
+          sub="acumulado no banco" cor="#8B5CF6" icon={Brain} />
+        <KPI label="Intervenções automáticas" valor={sinais?.intervencoes?.reduce((a, i) => a + i.total, 0) ?? 0}
+          sub="antecipação, simplificação e transbordo" cor="#F59E0B" icon={Users} />
+        <KPI label="Taxa de contenção" valor={`${contencao?.taxa_contencao_pct ?? 0}%`}
+          sub={`${contencao?.resolvidos_autoatendimento ?? 0} resolvidos sem humano`} cor="#10B981" icon={CheckCircle} />
+        <KPI label="Bloqueios de segurança" valor={seguranca?.bloqueados ?? 0}
+          sub="prompt injection e extração de dados" cor="#EF4444" icon={Shield} />
+      </div>
+
+      {/* Explicação da régua */}
+      <ComoFuncionaScore catalogo={catalogo} limiares={limiares} />
+
+      <div className="grid grid-cols-5 gap-4">
+        {/* Gráfico de sinais */}
+        <div className="col-span-2 bg-white rounded-xl p-5 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-900 mb-1">Sinais por tipo</h3>
+          <p className="text-[11px] text-gray-400 mb-3">Frequência real registrada no banco</p>
+          {dadosGrafico.length > 0 ? (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={dadosGrafico} barSize={28}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+                <XAxis dataKey="tipo" tick={{ fontSize: 8, fill: '#9CA3AF' }} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={50} />
+                <YAxis tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #E5E7EB' }} />
+                <Bar dataKey="total" radius={[5, 5, 0, 0]}>
+                  {dadosGrafico.map((d, i) => <Cell key={i} fill={d.cor} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-xs text-gray-400 py-12 text-center">Nenhum sinal registrado ainda.</p>
+          )}
+        </div>
+
+        {/* Clientes em risco de churn */}
+        <div className="col-span-3 bg-white rounded-xl p-5 shadow-sm">
+          <div className="flex items-center gap-2 mb-1">
+            <TrendingDown size={15} className="text-red-500" />
+            <h3 className="text-sm font-semibold text-gray-900">Clientes em risco de cancelamento</h3>
+          </div>
+          <p className="text-[11px] text-gray-400 mb-3">Sessões com risco de churn acima de 30% — ordenadas por prioridade de retenção</p>
+
+          {sinais?.clientes_em_risco?.length > 0 ? (
+            <div className="space-y-2">
+              {sinais.clientes_em_risco.map((c, i) => {
+                const nivel = NIVEL_CHURN[nivelChurnDe(c.risco_churn)]
+                return (
+                  <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg border" style={{ backgroundColor: `${nivel.cor}08`, borderColor: `${nivel.cor}25` }}>
+                    <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-[10px] font-bold text-gray-600 flex-shrink-0">
+                      {c.cliente_nome.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-semibold text-gray-800 truncate">{c.cliente_nome}</div>
+                      <div className="text-[10px] text-gray-400">
+                        {c.canal} · atrito {c.score_atrito} · {c.status?.replace(/_/g, ' ')}
+                        {c.protocolo_numero && <span className="font-mono"> · {c.protocolo_numero}</span>}
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="text-lg font-black leading-none" style={{ color: nivel.cor }}>{c.risco_churn}%</div>
+                      <div className="text-[9px] font-bold uppercase" style={{ color: nivel.cor }}>{nivel.label}</div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400 py-8 text-center">Nenhum cliente em risco no momento.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Log de sinais */}
+      <div className="bg-white rounded-xl p-5 shadow-sm">
+        <h3 className="text-sm font-semibold text-gray-900 mb-1">Log de sinais detectados</h3>
+        <p className="text-[11px] text-gray-400 mb-3">Cada linha é um sinal individual que somou pontos ao score de uma sessão</p>
+        <div className="overflow-y-auto" style={{ maxHeight: 320 }}>
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-white">
+              <tr className="border-b border-gray-100 text-gray-400">
+                <th className="text-left pb-2 font-semibold">Horário</th>
+                <th className="text-left pb-2 font-semibold">Canal</th>
+                <th className="text-left pb-2 font-semibold">Cliente</th>
+                <th className="text-left pb-2 font-semibold">Sinal detectado</th>
+                <th className="text-right pb-2 font-semibold">Peso</th>
+                <th className="text-right pb-2 font-semibold">Score da sessão</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sinais?.log?.map((l, i) => {
+                const def = catalogo?.find(c => c.tipo === l.tipo)
+                const cor = COR_SINAL[l.tipo] || '#6B7280'
+                const Icon = ICONE_SINAL[l.tipo] || AlertTriangle
+                return (
+                  <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50">
+                    <td className="py-2 pr-3 font-mono text-gray-400">{l.created_at?.slice(11, 16)}</td>
+                    <td className="py-2 pr-3">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-600 capitalize">{l.canal}</span>
+                    </td>
+                    <td className="py-2 pr-3 text-gray-600 truncate max-w-[140px]">{l.cliente_nome}</td>
+                    <td className="py-2 pr-3">
+                      <span className="flex items-center gap-1.5 font-medium" style={{ color: cor }}>
+                        <Icon size={11} /> {def?.rotulo || l.tipo?.replace(/_/g, ' ')}
+                      </span>
+                    </td>
+                    <td className="py-2 text-right font-bold" style={{ color: cor }}>+{l.valor}</td>
+                    <td className="py-2 text-right font-semibold text-gray-700">{l.score_atrito}</td>
+                  </tr>
+                )
+              })}
+              {(!sinais?.log || sinais.log.length === 0) && (
+                <tr><td colSpan={6} className="py-8 text-center text-gray-400">Nenhum sinal registrado ainda.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}

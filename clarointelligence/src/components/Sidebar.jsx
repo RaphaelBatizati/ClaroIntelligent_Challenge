@@ -9,6 +9,7 @@ import {
   Settings,
   Activity,
   MessagesSquare,
+  Headphones,
 } from 'lucide-react'
 
 const NAV_SECTIONS = [
@@ -24,6 +25,7 @@ const NAV_SECTIONS = [
     title: 'Atendimento',
     items: [
       { label: 'Chat do Cliente', icon: MessagesSquare, path: '/chat', badge: 'DEMO' },
+      { label: 'Console do Atendente', icon: Headphones, path: '/console-atendente', badge: 'FILA' },
     ],
   },
   {

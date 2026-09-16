@@ -4,11 +4,13 @@
 
 | Documento | Conteúdo |
 |---|---|
-| [COMO_RODAR.md](COMO_RODAR.md) | Passo a passo para clonar e rodar o projeto do zero em outra máquina, clientes de demonstração, solução de problemas |
-| [ARQUITETURA.md](ARQUITETURA.md) | As 5 camadas, o pipeline completo de uma mensagem, Product Context Resolver, adaptadores e motores |
+| [COMO_RODAR.md](COMO_RODAR.md) | Passo a passo para rodar do zero em outra máquina + **os 8 roteiros de demonstração**, com o que digitar em cada um |
+| [ARQUITETURA.md](ARQUITETURA.md) | As 5 camadas, o pipeline completo de uma mensagem, protocolo, Product Context Resolver, motores, fila humana e autoatendimento |
+| [PRODUTOS.md](PRODUTOS.md) | Catálogo real da Claro (móvel, fibra, tv+, empresas), chaves de identificação por linha e matriz de capacidades |
 | [BANCO_DE_DADOS.md](BANCO_DE_DADOS.md) | Esquema de todas as tabelas do SQLite, relacionamentos e convenções |
-| [API.md](API.md) | Todos os endpoints REST e SSE, com exemplos de request/response |
-| [SEGURANCA.md](SEGURANCA.md) | O que está implementado (SQL injection, minimização de CPF, CORS), limitações conhecidas e relação com a LGPD |
+| [API.md](API.md) | Todos os endpoints REST e SSE, com as 7 formas de resposta do pipeline de chat |
+| [SEGURANCA.md](SEGURANCA.md) | Guardrails contra prompt injection, verificação em duas etapas, LGPD e limitações conhecidas |
+| [INTEGRACAO_WHATSAPP.md](INTEGRACAO_WHATSAPP.md) | Análise de viabilidade da integração com WhatsApp real — requisitos, riscos e o que mudaria no código |
 | [DECISOES.md](DECISOES.md) | Por que cada escolha técnica não óbvia foi tomada |
 
 ## Outras pastas
