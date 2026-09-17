@@ -270,7 +270,7 @@ contagem de personas passa a somar exatamente o total filtrado, em vez de repeti
 | GET | `/api/dashboard/sinais` | sinais agregados, log recente e clientes em risco de churn |
 
 Todas essas rotas são **100% dado real do banco** — não há linha de base simulada somada à
-contagem. O volume histórico vem do seed (`npm run seed`), que gera ~560 atendimentos determinísticos
+contagem. O volume histórico vem do seed (`npm run seed`), que gera ~84 mil atendimentos determinísticos
 distribuídos em 30 dias.
 
 ### `GET /api/dashboard/mapa-atrito`
@@ -289,17 +289,28 @@ origem, assunto (jornada) e desfecho.
 ```json
 { "periodo": { "chave": "30d", "rotulo": "Últimos 30 dias" },
   "filtros_aplicados": { "canal": "whatsapp" },
-  "kpis": { "atendimentos": 183, "pontos_atrito": 203, "indice_medio": 34,
-            "taxa_recuperacao": 85, "jornada_critica": { "jornada": "Solicitação de cancelamento", "indice": 71 } },
-  "por_jornada": [{ "jornada": "...", "total": 35, "indice": 48, "em_risco": 6, "transferidos": 4 }],
-  "sinais": [{ "tipo": "repeticao_intencao", "total": 87, "rotulo": "Repetição de intenção", "peso": 22 }],
-  "heatmap": { "canais": [{ "chave": "whatsapp", "rotulo": "WhatsApp" }],
-               "linhas": [{ "jornada": "...", "celulas": [{ "canal": "whatsapp", "total": 35, "indice": 48 }] }] },
+  "kpis": { "atendimentos": 25128, "pontos_atrito": 28740, "indice_medio": 37,
+            "pct_com_atrito": 45, "taxa_recuperacao": 85,
+            "jornada_critica": { "jornada": "Solicitação de cancelamento", "pct_atrito": 74 } },
+  "por_jornada": [{ "jornada": "...", "total": 4082, "pct_atrito": 72, "indice": 48, "em_risco": 910, "transferidos": 604 }],
+  "sinais": [{ "tipo": "repeticao_intencao", "total": 9204, "rotulo": "Repetição de intenção", "peso": 22 }],
+  "heatmap": { "limiar": 40,
+               "canais": [{ "chave": "whatsapp", "rotulo": "WhatsApp" }],
+               "linhas": [{ "jornada": "...", "total": 1234,
+                            "celulas": [{ "canal": "whatsapp", "total": 1234, "com_atrito": 889, "pct_atrito": 72, "indice": 48 }] }] },
   "facetas": { "canal": {...}, "jornada": {...}, "persona": {...}, "linha": {...} } }
 ```
 
-**Garantia de coerência:** todos os números saem do mesmo array filtrado em memória, e cada faceta é
-contada ignorando apenas o próprio filtro. Por isso `por_jornada` e `facetas.persona` sempre somam
+**`pct_atrito` é a leitura principal da tela:** a fatia dos atendimentos daquele cruzamento cujo
+score final passou de `heatmap.limiar` (40, o limiar de alerta do ClaroSense). É percentual e não
+média porque só assim se comparam canais de volumes muito diferentes — 300 casos com atrito no app
+não significam o mesmo que 300 no call center, se um recebe o triplo do volume. O `indice` (média do
+score, 0–100) continua disponível em cada célula.
+
+**Garantia de coerência:** uma única consulta traz o período agregado por
+`jornada × canal × persona × linha` (menos de mil linhas para dezenas de milhares de atendimentos), e
+KPIs, jornadas, mapa de calor e facetas são derivados desse mesmo cubo — cada faceta filtrando por
+tudo menos a própria dimensão. Por isso `por_jornada` e `facetas.persona` sempre somam
 `kpis.atendimentos`, e o mapa de calor só traz colunas de canais que existem no recorte.
 
 ## Clientes

@@ -376,7 +376,7 @@ function seed() {
   console.log(`   • ${segs.length} eventos de segurança (guardrails)`)
   console.log(`   • ${resumoExtras.personas} personas de roteiro (guiada · informal · técnica)`)
   console.log(`   • ${1 + resumoExtras.fila} clientes aguardando no Console do Atendente`)
-  console.log(`   • ${resumoExtras.atendimentos_historico} atendimentos históricos em 30 dias (${resumoExtras.clientes_historico} clientes sintéticos)`)
+  console.log(`   • ${resumoExtras.atendimentos_historico.toLocaleString('pt-BR')} atendimentos históricos em 30 dias (${resumoExtras.clientes_historico} clientes sintéticos)`)
   console.log(`\n   Roteiro E (call center → chat): protocolo ${PROTO_ROBERTO} de Roberto Alves em aberto.`)
 }
 

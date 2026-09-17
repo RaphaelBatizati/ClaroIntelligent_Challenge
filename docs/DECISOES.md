@@ -44,10 +44,15 @@ base fixa dentro do endpoint (`total.n + 1847`, como era antes) cria um problema
 deixa de responder a filtro nenhum. Foi exatamente o que apareceu quando os filtros de período e de
 canal entraram: os KPIs não se moviam, porque a maior parte deles era constante.
 
-A solução foi mover o volume para onde ele pertence — os **dados**. O seed gera ~560 atendimentos
-determinísticos distribuídos em 30 dias, com canal, jornada, persona, score e sinais coerentes entre
-si ([`seed-extras.js`](../clarointelligence-api/src/seed-extras.js), PRNG com semente fixa). As
-rotas de `routes/dashboard.js` passaram a ser **100% agregação do banco**.
+A solução foi mover o volume para onde ele pertence — os **dados**. O seed gera ~84 mil atendimentos
+determinísticos distribuídos em 30 dias — a ordem de grandeza de um portal de operadora, que é o que
+o painel precisa mostrar para não parecer um sistema de brinquedo. Canal, jornada, persona, score,
+sinais e intervenções são coerentes entre si
+([`seed-extras.js`](../clarointelligence-api/src/seed-extras.js), PRNG com semente fixa). As rotas de
+`routes/dashboard.js` passaram a ser **100% agregação do banco**.
+
+O custo é baixo: o SQLite grava ~600 mil linhas por segundo numa transação única, então o seed leva
+~6 segundos e o arquivo fica em torno de 90MB (não versionado).
 
 Ganhos: todo filtro passa a funcionar de verdade, os números batem entre telas, e rodar o seed duas
 vezes produz o mesmo painel — o que importa quando se está gravando um pitch.

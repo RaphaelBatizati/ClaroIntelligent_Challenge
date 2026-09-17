@@ -35,6 +35,11 @@ function desde(periodo) {
   return `datetime('now', '${periodo.sql}')`
 }
 
+// Limiares do ClaroSense reaproveitados na leitura do mapa: "com atrito" e o
+// atendimento que passou de alerta; "em risco", o que passou de risco.
+const LIMIAR_ATRITO = 40
+const LIMIAR_RISCO = 65
+
 const CANAIS = ['site', 'app', 'whatsapp', 'callcenter']
 const PERSONAS = ['digital', 'intermediario', 'assistido', 'informal']
 const LINHAS = ['residencial', 'movel', 'tv', 'empresas']
@@ -45,48 +50,50 @@ const ROTULO_CANAL = {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
- * Mapa de Atrito — base única, filtros em cascata
+ * Mapa de Atrito — um cubo agregado, todos os números derivados dele
  * ──────────────────────────────────────────────────────────────────────────*/
 
 /**
- * Carrega os atendimentos do período como registros simples.
- * A unidade de análise é o protocolo: é ele que representa uma demanda do
- * cliente, tem canal de origem, assunto (jornada) e desfecho.
+ * Traz o período inteiro pré-agregado por jornada × canal × persona × linha.
+ *
+ * Com dezenas de milhares de atendimentos, refiltrar o conjunto bruto uma vez
+ * por jornada, por célula do mapa e por faceta custava meio segundo. O SQLite
+ * reduz as ~85 mil linhas a menos de mil combinações em uma varredura; daí para
+ * frente tudo é aritmética sobre um punhado de linhas.
+ *
+ * É também o que garante a coerência da tela: KPIs, jornadas, mapa de calor e
+ * contadores de filtro saem todos deste mesmo cubo.
  */
-function carregarBase(periodo) {
-  const db = getDb()
-
-  const protocolos = db.prepare(`
-    SELECT pr.numero, pr.sessao_id, pr.canal_origem AS canal, pr.assunto AS jornada,
-           pr.status, pr.resolvido_por, pr.score_atrito_final AS score, pr.created_at,
+function cuboDoPeriodo(periodo) {
+  return getDb().prepare(`
+    SELECT pr.assunto AS jornada,
+           pr.canal_origem AS canal,
            c.perfil_persona AS persona,
-           COALESCE(p.linha, 'sem-produto') AS linha
+           COALESCE(p.linha, 'sem-produto') AS linha,
+           COUNT(*) AS total,
+           SUM(pr.score_atrito_final) AS soma_score,
+           SUM(CASE WHEN pr.score_atrito_final >= ${LIMIAR_ATRITO} THEN 1 ELSE 0 END) AS com_atrito,
+           SUM(CASE WHEN pr.score_atrito_final >= ${LIMIAR_RISCO} THEN 1 ELSE 0 END) AS em_risco,
+           SUM(CASE WHEN pr.status = 'transferido' OR pr.resolvido_por = 'atendente_humano' THEN 1 ELSE 0 END) AS transferidos,
+           SUM(CASE WHEN pr.status = 'resolvido' THEN 1 ELSE 0 END) AS resolvidos,
+           SUM(CASE WHEN pr.status = 'resolvido' AND pr.resolvido_por != 'atendente_humano' THEN 1 ELSE 0 END) AS resolvidos_sem_humano
     FROM protocolos pr
     JOIN clientes c ON pr.cliente_id = c.id
     LEFT JOIN produtos_catalogo p ON pr.produto_codigo = p.codigo
     WHERE pr.created_at >= ${desde(periodo)}
+    GROUP BY 1, 2, 3, 4
   `).all()
-
-  // Sinais do ClaroSense por sessão — anexados ao protocolo da mesma sessão
-  const sinais = db.prepare(`
-    SELECT sessao_id, tipo, COUNT(*) AS total
-    FROM sinais_atrito
-    WHERE created_at >= ${desde(periodo)}
-    GROUP BY sessao_id, tipo
-  `).all()
-
-  const porSessao = new Map()
-  for (const s of sinais) {
-    if (!porSessao.has(s.sessao_id)) porSessao.set(s.sessao_id, [])
-    porSessao.get(s.sessao_id).push({ tipo: s.tipo, total: s.total })
-  }
-
-  return protocolos.map(p => ({ ...p, sinais: porSessao.get(p.sessao_id) || [] }))
 }
 
-/** Aplica os filtros ativos, opcionalmente ignorando um deles (para as facetas). */
-function aplicar(base, filtros, ignorar = null) {
-  return base.filter(r =>
+/**
+ * Filtra linhas do cubo, opcionalmente ignorando uma dimensão.
+ *
+ * `ignorar` é o que torna as facetas honestas: o contador ao lado de "Call
+ * Center" respeita persona, linha, jornada e período, mas não o filtro de canal
+ * — senão só sobraria a opção já escolhida.
+ */
+function recortar(cubo, filtros, ignorar = null) {
+  return cubo.filter(r =>
     (ignorar === 'canal' || !filtros.canal || r.canal === filtros.canal) &&
     (ignorar === 'jornada' || !filtros.jornada || r.jornada === filtros.jornada) &&
     (ignorar === 'persona' || !filtros.persona || r.persona === filtros.persona) &&
@@ -94,19 +101,16 @@ function aplicar(base, filtros, ignorar = null) {
   )
 }
 
-function contar(itens, campo) {
+/** Soma o total de atendimentos por valor de uma dimensão. */
+function somarPor(linhas, dimensao) {
   const mapa = {}
-  for (const i of itens) mapa[i[campo]] = (mapa[i[campo]] || 0) + 1
+  for (const r of linhas) mapa[r[dimensao]] = (mapa[r[dimensao]] || 0) + r.total
   return mapa
-}
-
-function media(nums) {
-  if (!nums.length) return 0
-  return Math.round(nums.reduce((a, b) => a + b, 0) / nums.length)
 }
 
 router.get('/mapa-atrito', (req, res) => {
   try {
+    const db = getDb()
     const periodo = periodoDe(req)
     const filtros = {
       canal: CANAIS.includes(req.query.canal) ? req.query.canal : null,
@@ -115,76 +119,130 @@ router.get('/mapa-atrito', (req, res) => {
       linha: LINHAS.includes(req.query.linha) ? req.query.linha : null,
     }
 
-    const base = carregarBase(periodo)
-    const itens = aplicar(base, filtros)
+    const cubo = cuboDoPeriodo(periodo)
+    const recorte = recortar(cubo, filtros)
 
-    // ── Jornadas
-    const jornadas = Object.entries(contar(itens, 'jornada'))
-      .map(([jornada, total]) => {
-        const doGrupo = itens.filter(i => i.jornada === jornada)
-        return {
-          jornada,
-          total,
-          indice: media(doGrupo.map(i => i.score || 0)),
-          em_risco: doGrupo.filter(i => (i.score || 0) >= 65).length,
-          transferidos: doGrupo.filter(i => i.status === 'transferido' || i.resolvido_por === 'atendente_humano').length,
-        }
-      })
-      .sort((a, b) => b.indice - a.indice)
+    // ── Acumula jornadas, células do mapa e KPIs numa passagem ─────────────
+    const porJornada = new Map()
+    const canaisVistos = new Set()
+    let atendimentos = 0, somaScore = 0, comAtrito = 0
+    let resolvidos = 0, resolvidosSemHumano = 0
 
-    // ── Sinais de atrito (só das conversas que sobreviveram ao filtro)
-    const totalPorSinal = {}
-    for (const i of itens) {
-      for (const s of i.sinais) totalPorSinal[s.tipo] = (totalPorSinal[s.tipo] || 0) + s.total
+    for (const r of recorte) {
+      canaisVistos.add(r.canal)
+      atendimentos += r.total
+      somaScore += r.soma_score
+      comAtrito += r.com_atrito
+      resolvidos += r.resolvidos
+      resolvidosSemHumano += r.resolvidos_sem_humano
+
+      let j = porJornada.get(r.jornada)
+      if (!j) {
+        j = { jornada: r.jornada, total: 0, soma: 0, em_risco: 0, transferidos: 0, canais: new Map() }
+        porJornada.set(r.jornada, j)
+      }
+      j.total += r.total
+      j.soma += r.soma_score
+      j.em_risco += r.em_risco
+      j.transferidos += r.transferidos
+
+      let cel = j.canais.get(r.canal)
+      if (!cel) {
+        cel = { total: 0, soma: 0, com_atrito: 0 }
+        j.canais.set(r.canal, cel)
+      }
+      cel.total += r.total
+      cel.soma += r.soma_score
+      cel.com_atrito += r.com_atrito
     }
-    const sinais = Object.entries(totalPorSinal)
-      .map(([tipo, total]) => ({
-        tipo,
-        total,
-        rotulo: SINAIS[tipo]?.rotulo || tipo.replace(/_/g, ' '),
-        peso: SINAIS[tipo]?.peso || 0,
-        explicacao: SINAIS[tipo]?.explicacao || null,
+
+    const jornadas = [...porJornada.values()]
+      .map(j => ({
+        jornada: j.jornada,
+        total: j.total,
+        indice: j.total ? Math.round(j.soma / j.total) : 0,
+        pct_atrito: j.total ? Math.round(([...j.canais.values()].reduce((a, c) => a + c.com_atrito, 0) / j.total) * 100) : 0,
+        em_risco: j.em_risco,
+        transferidos: j.transferidos,
       }))
-      .sort((a, b) => b.total - a.total)
+      .sort((a, b) => b.pct_atrito - a.pct_atrito || b.indice - a.indice)
 
-    // ── Mapa de calor jornada × canal: só células com atendimento real
-    const canaisPresentes = CANAIS.filter(c => itens.some(i => i.canal === c))
-    const heatmap = jornadas.map(j => ({
-      jornada: j.jornada,
-      celulas: canaisPresentes.map(canal => {
-        const celula = itens.filter(i => i.jornada === j.jornada && i.canal === canal)
-        return {
-          canal,
-          total: celula.length,
-          indice: celula.length ? media(celula.map(i => i.score || 0)) : null,
-        }
-      }),
-    }))
+    // ── Mapa de calor em percentual ────────────────────────────────────────
+    // A célula responde "que fatia dos atendimentos desta jornada, neste canal,
+    // passou do limiar de atrito?". Percentual e não média porque é o que
+    // permite comparar canais de volumes muito diferentes: 300 casos com atrito
+    // no app não significam o mesmo que 300 no call center, se um recebe o
+    // triplo do volume do outro.
+    const canaisPresentes = CANAIS.filter(c => canaisVistos.has(c))
+    const linhasHeat = jornadas.map(j => {
+      const grupo = porJornada.get(j.jornada)
+      return {
+        jornada: j.jornada,
+        total: j.total,
+        celulas: canaisPresentes.map(canal => {
+          const c = grupo.canais.get(canal)
+          if (!c || !c.total) return { canal, total: 0, pct_atrito: null, indice: null }
+          return {
+            canal,
+            total: c.total,
+            com_atrito: c.com_atrito,
+            pct_atrito: Math.round((c.com_atrito / c.total) * 100),
+            indice: Math.round(c.soma / c.total),
+          }
+        }),
+      }
+    })
 
-    // ── KPIs — todos derivados do mesmo array
-    const pontosAtrito = itens.reduce((acc, i) => acc + i.sinais.reduce((a, s) => a + s.total, 0), 0)
-    const encerrados = itens.filter(i => i.status === 'resolvido')
-    const semHumano = encerrados.filter(i => i.resolvido_por !== 'atendente_humano')
+    // ── Sinais do ClaroSense das conversas deste recorte ───────────────────
+    // Fica fora do cubo porque um atendimento pode disparar vários sinais —
+    // somá-los junto inflaria a contagem de atendimentos.
+    const where = [`pr.created_at >= ${desde(periodo)}`]
+    const params = []
+    if (filtros.canal) { where.push('pr.canal_origem = ?'); params.push(filtros.canal) }
+    if (filtros.jornada) { where.push('pr.assunto = ?'); params.push(filtros.jornada) }
+    if (filtros.persona) { where.push('c.perfil_persona = ?'); params.push(filtros.persona) }
+    if (filtros.linha) { where.push(`COALESCE(p.linha, 'sem-produto') = ?`); params.push(filtros.linha) }
+
+    const sinaisRows = db.prepare(`
+      SELECT s.tipo, COUNT(*) AS total
+      FROM sinais_atrito s
+      JOIN protocolos pr ON pr.sessao_id = s.sessao_id
+      JOIN clientes c ON pr.cliente_id = c.id
+      LEFT JOIN produtos_catalogo p ON pr.produto_codigo = p.codigo
+      WHERE ${where.join(' AND ')}
+      GROUP BY s.tipo
+      ORDER BY total DESC
+    `).all(...params)
 
     res.json({
       periodo: { chave: periodo.chave, rotulo: periodo.rotulo },
       filtros_aplicados: Object.fromEntries(Object.entries(filtros).filter(([, v]) => v)),
       kpis: {
-        atendimentos: itens.length,
-        pontos_atrito: pontosAtrito,
-        indice_medio: media(itens.map(i => i.score || 0)),
-        taxa_recuperacao: encerrados.length ? Math.round((semHumano.length / encerrados.length) * 100) : null,
+        atendimentos,
+        pontos_atrito: sinaisRows.reduce((a, s) => a + s.total, 0),
+        indice_medio: atendimentos ? Math.round(somaScore / atendimentos) : 0,
+        pct_com_atrito: atendimentos ? Math.round((comAtrito / atendimentos) * 100) : 0,
+        taxa_recuperacao: resolvidos ? Math.round((resolvidosSemHumano / resolvidos) * 100) : null,
         jornada_critica: jornadas[0] || null,
       },
       por_jornada: jornadas,
-      sinais,
-      heatmap: { canais: canaisPresentes.map(c => ({ chave: c, rotulo: ROTULO_CANAL[c] })), linhas: heatmap },
-      // Facetas: cada contagem ignora o próprio filtro e respeita os demais
+      sinais: sinaisRows.map(s => ({
+        tipo: s.tipo,
+        total: s.total,
+        rotulo: SINAIS[s.tipo]?.rotulo || s.tipo.replace(/_/g, ' '),
+        peso: SINAIS[s.tipo]?.peso || 0,
+        explicacao: SINAIS[s.tipo]?.explicacao || null,
+      })),
+      heatmap: {
+        limiar: LIMIAR_ATRITO,
+        canais: canaisPresentes.map(c => ({ chave: c, rotulo: ROTULO_CANAL[c] })),
+        linhas: linhasHeat,
+      },
       facetas: {
-        canal: contar(aplicar(base, filtros, 'canal'), 'canal'),
-        jornada: contar(aplicar(base, filtros, 'jornada'), 'jornada'),
-        persona: contar(aplicar(base, filtros, 'persona'), 'persona'),
-        linha: contar(aplicar(base, filtros, 'linha'), 'linha'),
+        canal: somarPor(recortar(cubo, filtros, 'canal'), 'canal'),
+        jornada: somarPor(recortar(cubo, filtros, 'jornada'), 'jornada'),
+        persona: somarPor(recortar(cubo, filtros, 'persona'), 'persona'),
+        linha: somarPor(recortar(cubo, filtros, 'linha'), 'linha'),
       },
     })
   } catch (err) {
@@ -203,35 +261,44 @@ router.get('/kpis', (req, res) => {
     const periodo = periodoDe(req)
     const janela = desde(periodo)
 
-    const sessoes = db.prepare(`
-      SELECT status, score_atrito, risco_churn, canal FROM sessoes WHERE created_at >= ${janela}
-    `).all()
+    // Tudo agregado no banco. Trazer as sessões do período para contar em
+    // JavaScript funcionava com centenas de linhas; com dezenas de milhares,
+    // vira meio segundo de latência a cada troca de período.
+    const s = db.prepare(`
+      SELECT COUNT(*) AS total,
+             SUM(CASE WHEN status = 'ativa' THEN 1 ELSE 0 END) AS ativas,
+             SUM(CASE WHEN status IN ('transferida','em_atendimento_humano') THEN 1 ELSE 0 END) AS transferidas,
+             AVG(score_atrito) AS score_medio,
+             AVG(risco_churn) AS churn_medio
+      FROM sessoes WHERE created_at >= ${janela}
+    `).get()
 
-    const protocolos = db.prepare(`
-      SELECT status, resolvido_por FROM protocolos WHERE created_at >= ${janela}
-    `).all()
+    const p = db.prepare(`
+      SELECT COUNT(*) AS total,
+             SUM(CASE WHEN status = 'resolvido' THEN 1 ELSE 0 END) AS resolvidos,
+             SUM(CASE WHEN status = 'resolvido' AND resolvido_por = 'atendente_humano' THEN 1 ELSE 0 END) AS por_humano
+      FROM protocolos WHERE created_at >= ${janela}
+    `).get()
 
     const intervencoes = db.prepare(`SELECT COUNT(*) AS n FROM intervencoes WHERE created_at >= ${janela}`).get()
     const memorias = db.prepare(`SELECT COUNT(*) AS n FROM memoria_conversacional WHERE created_at >= ${janela}`).get()
 
-    const encerrados = protocolos.filter(p => p.status === 'resolvido')
-    const porHumano = encerrados.filter(p => p.resolvido_por === 'atendente_humano').length
-    const transferidas = sessoes.filter(s => s.status === 'transferida' || s.status === 'em_atendimento_humano').length
-
-    const canais = {}
-    for (const c of CANAIS) canais[c] = sessoes.filter(s => s.canal === c).length
+    const porCanal = db.prepare(`
+      SELECT canal, COUNT(*) AS n FROM sessoes WHERE created_at >= ${janela} GROUP BY canal
+    `).all()
+    const canais = Object.fromEntries(CANAIS.map(c => [c, porCanal.find(r => r.canal === c)?.n || 0]))
 
     res.json({
       periodo: { chave: periodo.chave, rotulo: periodo.rotulo },
-      total_sessoes: sessoes.length,
-      sessoes_ativas: sessoes.filter(s => s.status === 'ativa').length,
-      transferencias: transferidas,
-      score_atrito_medio: media(sessoes.map(s => s.score_atrito || 0)),
-      risco_churn_medio: media(sessoes.map(s => s.risco_churn || 0)),
-      protocolos: protocolos.length,
+      total_sessoes: s.total,
+      sessoes_ativas: s.ativas || 0,
+      transferencias: s.transferidas || 0,
+      score_atrito_medio: Math.round(s.score_medio || 0),
+      risco_churn_medio: Math.round(s.churn_medio || 0),
+      protocolos: p.total,
       // Contenção: resolvidos sem atendente humano sobre o total de resolvidos
-      contencao_pct: encerrados.length ? Math.round(((encerrados.length - porHumano) / encerrados.length) * 100) : null,
-      transbordo_pct: sessoes.length ? Math.round((transferidas / sessoes.length) * 100) : 0,
+      contencao_pct: p.resolvidos ? Math.round(((p.resolvidos - p.por_humano) / p.resolvidos) * 100) : null,
+      transbordo_pct: s.total ? Math.round(((s.transferidas || 0) / s.total) * 100) : 0,
       intervencoes: intervencoes.n,
       memorias_recuperadas: memorias.n,
       canais,

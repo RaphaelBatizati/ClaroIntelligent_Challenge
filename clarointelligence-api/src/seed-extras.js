@@ -51,7 +51,7 @@ const ts = (date) => date.toISOString().replace('T', ' ').slice(0, 19)
 // O índice base reflete o que a operação observa na prática: cancelamento e
 // titularidade são jornadas caras e travadas; recarga e franquia, triviais.
 const JORNADAS = [
-  { assunto: 'Solicitação de cancelamento', intencao: 'cancelamento', base: 68, peso: 6, tipo: 'retencao' },
+  { assunto: 'Solicitação de cancelamento', intencao: 'cancelamento', base: 56, peso: 6, tipo: 'retencao' },
   { assunto: 'Troca de titularidade', intencao: 'troca_titularidade', base: 54, peso: 4, tipo: 'cadastro' },
   { assunto: 'Suporte técnico', intencao: 'suporte_tecnico', base: 46, peso: 22, tipo: 'tecnico' },
   { assunto: 'Cobrança divergente na fatura', intencao: 'segunda_via', base: 44, peso: 9, tipo: 'financeiro' },
@@ -82,13 +82,38 @@ const FALAS_CLIENTE = {
   'Roaming internacional': ['vou viajar, como fica o roaming?', 'meu plano funciona no exterior?'],
 }
 
-const NOMES_HISTORICO = [
-  ['Beatriz Nogueira', 'F'], ['Rafael Andrade', 'M'], ['Camila Ferraz', 'F'], ['Diego Pontes', 'M'],
-  ['Larissa Bastos', 'F'], ['Gustavo Rocha', 'M'], ['Patrícia Lemos', 'F'], ['Eduardo Vilela', 'M'],
-  ['Sabrina Teixeira', 'F'], ['Marcelo Queiroz', 'M'], ['Juliana Prado', 'F'], ['Henrique Sales', 'M'],
-  ['Renata Moura', 'F'], ['Vinícius Camargo', 'M'], ['Tatiane Ribeiro', 'F'], ['André Fontes', 'M'],
-  ['Cristina Barbosa', 'F'], ['Leandro Pires', 'M'], ['Sanches Logística Ltda', 'PJ'], ['Atlas Clínicas Ltda', 'PJ'],
+// Base de clientes sintéticos. São combinações de nomes comuns, e não uma lista
+// fixa: com milhares de atendimentos por dia, ver o mesmo punhado de nomes
+// repetido no Monitor de Conversas denunciaria na hora que o dado é de mentira.
+const PRENOMES = [
+  'Beatriz', 'Rafael', 'Camila', 'Diego', 'Larissa', 'Gustavo', 'Patrícia', 'Eduardo',
+  'Sabrina', 'Marcelo', 'Juliana', 'Henrique', 'Renata', 'Vinícius', 'Tatiane', 'André',
+  'Cristina', 'Leandro', 'Fernanda', 'Rodrigo', 'Aline', 'Thiago', 'Priscila', 'Bruno',
+  'Vanessa', 'Felipe', 'Daniela', 'Alexandre', 'Simone', 'Márcio', 'Elaine', 'Ricardo',
+  'Adriana', 'Fábio', 'Michele', 'Sérgio', 'Carla', 'Anderson', 'Luciana', 'Wagner',
 ]
+const SOBRENOMES = [
+  'Nogueira', 'Andrade', 'Ferraz', 'Pontes', 'Bastos', 'Rocha', 'Lemos', 'Vilela',
+  'Teixeira', 'Queiroz', 'Prado', 'Sales', 'Moura', 'Camargo', 'Ribeiro', 'Fontes',
+  'Barbosa', 'Pires', 'Macedo', 'Siqueira', 'Cordeiro', 'Antunes', 'Peixoto', 'Vasconcelos',
+]
+const EMPRESAS = [
+  'Sanches Logística', 'Atlas Clínicas', 'Norte Engenharia', 'Prisma Contábil',
+  'Vetor Distribuidora', 'Lumina Educação', 'Meridiano Transportes', 'Orbital Seguros',
+]
+
+/** ~440 clientes: 8 empresas + combinações de prenome × sobrenome. */
+function gerarBaseClientes(rand) {
+  const base = EMPRESAS.map(nome => ({ nome: `${nome} Ltda`, pj: true }))
+  for (const prenome of PRENOMES) {
+    // Cada prenome recebe um punhado de sobrenomes sorteados, não todos
+    const quantos = 10 + Math.floor(rand() * 3)
+    const usados = new Set()
+    while (usados.size < quantos) usados.add(escolher(rand, SOBRENOMES))
+    for (const sobrenome of usados) base.push({ nome: `${prenome} ${sobrenome}`, pj: false })
+  }
+  return base
+}
 
 /**
  * Popula o banco com os três blocos.
@@ -121,6 +146,10 @@ function popular(db, { produtos, minutosAtras, j, proximoSequencial }) {
     VALUES (@id, @sessao_id, @papel, @conteudo, @intencao_codigo, @produto_codigo, @score_atrito_turno, @protocolo_numero, @created_at)
   `)
   const insertSinal = db.prepare(`INSERT OR IGNORE INTO sinais_atrito (id, sessao_id, tipo, valor, created_at) VALUES (?, ?, ?, ?, ?)`)
+  const insertInterv = db.prepare(`
+    INSERT OR IGNORE INTO intervencoes (id, sessao_id, tipo, gatilho, acao, resultado, protocolo_numero, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `)
   const insertFila = db.prepare(`
     INSERT OR IGNORE INTO fila_atendimento (id, protocolo_numero, sessao_id, cliente_id, canal, motivo, prioridade, score_atrito, risco_churn, tipo_servico, produto_linha, status, resumo_contexto, entrou_em)
     VALUES (@id, @protocolo_numero, @sessao_id, @cliente_id, @canal, @motivo, @prioridade, @score_atrito, @risco_churn, @tipo_servico, @produto_linha, 'aguardando', @resumo, @entrou_em)
@@ -325,26 +354,25 @@ function popular(db, { produtos, minutosAtras, j, proximoSequencial }) {
   // ═══════════════════════════════════════════════════════════════════════════
   // 3. VOLUME HISTÓRICO — 30 dias
   // ═══════════════════════════════════════════════════════════════════════════
-  const clientesHistorico = NOMES_HISTORICO.map(([nome, sexo], i) => {
-    const pj = sexo === 'PJ'
-    const produtosPessoais = produtos.filter(p => p.segmento === 'pessoal')
-    const produtosEmpresa = produtos.filter(p => p.segmento === 'empresarial')
-    const produto = pj ? escolher(rand, produtosEmpresa) : escolher(rand, produtosPessoais)
+  const produtosPessoais = produtos.filter(p => p.segmento === 'pessoal')
+  const produtosEmpresa = produtos.filter(p => p.segmento === 'empresarial')
 
+  const clientesHistorico = gerarBaseClientes(rand).map((base, i) => {
+    const produto = base.pj ? escolher(rand, produtosEmpresa) : escolher(rand, produtosPessoais)
     const cliente = {
-      id: `cli-hist-${String(i + 1).padStart(2, '0')}`,
-      nome,
-      email: `${nome.toLowerCase().replace(/[^a-z]+/g, '.')}@email.com`,
-      telefone: `(${11 + (i % 80)}) 9${String(80000000 + i * 137).slice(0, 8)}`,
-      cpf_mascara: pj ? null : `***.***.${String(100 + i)}-**`,
-      cnpj_mascara: pj ? '**.***.***/0001-**' : null,
-      tipo_pessoa: pj ? 'PJ' : 'PF',
-      segmento: pj ? 'empresarial' : 'pessoal',
+      id: `cli-h${i}`,
+      nome: base.nome,
+      email: `${base.nome.toLowerCase().normalize('NFD').replace(/[^a-z]+/g, '.')}${i}@email.com`,
+      telefone: `(${11 + (i % 78)}) 9${String(80000000 + i * 137).slice(0, 8)}`,
+      cpf_mascara: base.pj ? null : `***.***.${String(100 + (i % 900))}-**`,
+      cnpj_mascara: base.pj ? '**.***.***/0001-**' : null,
+      tipo_pessoa: base.pj ? 'PJ' : 'PF',
+      segmento: base.pj ? 'empresarial' : 'pessoal',
       perfil_persona: ponderado(rand, [['intermediario', 40], ['digital', 28], ['assistido', 20], ['informal', 12]]),
     }
     insertCli.run(cliente)
     insertCtr.run({
-      id: `ctr-hist-${i + 1}`, cliente_id: cliente.id, produto_codigo: produto.codigo,
+      id: `ctr-h${i}`, cliente_id: cliente.id, produto_codigo: produto.codigo,
       linha: produto.linha, plano_nome: produto.nome, valor_mensal: produto.valor_referencia || 99.90,
       data_inicio: '2024-02-01', dados_extra: j({}),
     })
@@ -356,17 +384,30 @@ function popular(db, { produtos, minutosAtras, j, proximoSequencial }) {
   const sequenciaPorDia = {}
   const agora = new Date()
   let totalHistorico = 0
+  let seq = 0
+
+  // Volume diário na ordem de grandeza de um portal de atendimento de operadora:
+  // ~3.200 atendimentos em dia útil, caindo no fim de semana. Em 30 dias isso dá
+  // por volta de 84 mil — que é o que o painel precisa mostrar para não parecer
+  // um sistema de brinquedo. O custo é aceitável: o SQLite grava ~600 mil linhas
+  // por segundo em transação única.
+  const VOLUME_DIA_UTIL = 3200
+  const VOLUME_SABADO = 2200
+  const VOLUME_DOMINGO = 1500
+  const VOLUME_ULTIMA_HORA = 140
 
   db.exec('BEGIN')
-  // -1 representa a "última hora": um punhado de atendimentos nos últimos 55
-  // minutos, para que o filtro de período mais curto também tenha o que mostrar.
+  // -1 representa a "última hora": um lote nos últimos 55 minutos, para que o
+  // filtro de período mais curto também tenha o que mostrar.
   for (let diasAtras = 29; diasAtras >= -1; diasAtras--) {
     const ultimaHora = diasAtras === -1
     const dia = new Date(agora.getTime() - Math.max(diasAtras, 0) * 86400000)
     const diaSemana = dia.getDay()
-    // Segunda a sexta concentram o volume; domingo é o vale da semana
-    const base = diaSemana === 0 ? 9 : diaSemana === 6 ? 12 : 17
-    const quantidade = ultimaHora ? 7 : base + Math.floor(rand() * 7)
+    const base = diaSemana === 0 ? VOLUME_DOMINGO : diaSemana === 6 ? VOLUME_SABADO : VOLUME_DIA_UTIL
+    // ±12% de variação entre dias — uma série perfeitamente lisa não convence
+    const quantidade = ultimaHora
+      ? VOLUME_ULTIMA_HORA
+      : Math.round(base * (0.88 + rand() * 0.24))
 
     for (let k = 0; k < quantidade; k++) {
       const cliente = escolher(rand, clientesHistorico)
@@ -385,7 +426,24 @@ function popular(db, { produtos, minutosAtras, j, proximoSequencial }) {
       // O último dia só existe até agora — não se inventa atendimento no futuro
       if (quando > agora) continue
 
-      const score = Math.max(0, Math.min(100, Math.round(jornada.base + (rand() - 0.5) * 52)))
+      // O canal muda o atrito, e é justamente isso que o mapa de calor precisa
+      // revelar: no call center o cliente espera em fila e repete o problema
+      // para cada transferência; no app resolve sozinho. Sem esse viés todas as
+      // colunas do mapa dariam o mesmo número e a tela não diria nada.
+      const vieCanal = { app: -7, site: -2, whatsapp: 3, callcenter: 11 }[canal] || 0
+      // Cruzamentos que a operação conhece: cancelamento por telefone é o pior
+      // caminho possível, e problema técnico pelo WhatsApp se arrasta porque o
+      // diagnóstico depende do cliente responder entre uma tarefa e outra.
+      const vieCruzamento =
+        (jornada.intencao === 'cancelamento' && canal === 'callcenter') ? 9
+          : (jornada.intencao === 'suporte_tecnico' && canal === 'whatsapp') ? 7
+            : (jornada.intencao === 'segunda_via' && canal === 'app') ? -4
+              : (jornada.intencao === 'pagamento' && canal === 'app') ? -3
+                : 0
+
+      const score = Math.max(0, Math.min(100, Math.round(
+        jornada.base + vieCanal + vieCruzamento + (rand() - 0.5) * 74
+      )))
       const churn = Math.max(0, Math.min(100, Math.round(score * 0.7 + (rand() - 0.4) * 20)))
       // Transbordo: automático acima do limiar do ClaroSense, e uma fração dos
       // casos de atrito médio em que o cliente pediu humano por conta própria.
@@ -403,14 +461,17 @@ function popular(db, { produtos, minutosAtras, j, proximoSequencial }) {
       }
       sequenciaPorDia[diaChave] += 1
       const numero = `${diaChave}${String(sequenciaPorDia[diaChave]).padStart(6, '0')}`
-      const sessaoId = uuidv4()
+      // Id sequencial em vez de UUID: são centenas de milhares de linhas, e
+      // `crypto.randomUUID` custa mais do que todo o resto do laço somado.
+      seq += 1
+      const sessaoId = `ses-h${seq}`
 
       insertSes.run({
         id: sessaoId, cliente_id: cliente.id, canal, produto_codigo_foco: cliente.produto.codigo,
         score_atrito: score, risco_churn: churn,
         status: aindaAberto ? 'ativa' : transferida ? 'transferida' : 'encerrada',
         verificado: canal === 'whatsapp' ? 1 : 0, protocolo_numero: numero,
-        trace_id: uuidv4(), created_at: ts(quando), updated_at: ts(fim),
+        trace_id: `tr-h${seq}`, created_at: ts(quando), updated_at: ts(fim),
       })
 
       insertProto.run({
@@ -426,12 +487,12 @@ function popular(db, { produtos, minutosAtras, j, proximoSequencial }) {
 
       const fala = escolher(rand, FALAS_CLIENTE[jornada.assunto] || ['preciso de ajuda'])
       insertMsg.run({
-        id: uuidv4(), sessao_id: sessaoId, papel: 'cliente', conteudo: fala,
+        id: `msg-h${seq}a`, sessao_id: sessaoId, papel: 'cliente', conteudo: fala,
         intencao_codigo: jornada.intencao, produto_codigo: cliente.produto.codigo,
         score_atrito_turno: score, protocolo_numero: numero, created_at: ts(quando),
       })
       insertMsg.run({
-        id: uuidv4(), sessao_id: sessaoId, papel: 'sistema',
+        id: `msg-h${seq}b`, sessao_id: sessaoId, papel: 'sistema',
         conteudo: transferida
           ? `Encaminhei seu caso para um especialista. Protocolo **${numero}** com o histórico completo.`
           : `Localizei seu contrato ${cliente.produto.nome}. Protocolo **${numero}** registrado para este atendimento.`,
@@ -448,8 +509,22 @@ function popular(db, { produtos, minutosAtras, j, proximoSequencial }) {
       if (score >= 72 && rand() < 0.6) sinais.push('solicita_humano')
       if (jornada.intencao === 'cancelamento') sinais.push('intencao_cancelamento')
       if (rand() < 0.18) sinais.push('recontato_multicanal')
-      for (const tipo of sinais) {
-        insertSinal.run(uuidv4(), sessaoId, tipo, PESO_SINAL[tipo], ts(new Date(quando.getTime() + 60000)))
+      sinais.forEach((tipo, n) => {
+        insertSinal.run(`sin-h${seq}-${n}`, sessaoId, tipo, PESO_SINAL[tipo], ts(new Date(quando.getTime() + 60000)))
+      })
+
+      // Intervenção do ClaroSense, seguindo os mesmos limiares do serviço: um
+      // painel que mostra 20 mil atendimentos e 6 intervenções não convence
+      // ninguém de que o motor está rodando.
+      if (score >= 40) {
+        const tipo = score >= 80 ? 'transferencia_humano' : score >= 65 ? 'simplificacao' : 'antecipacao'
+        insertInterv.run(
+          `int-h${seq}`, sessaoId, tipo, `score_atrito=${score}`,
+          tipo === 'transferencia_humano' ? 'Transferência automática para fila prioritária com contexto completo'
+            : tipo === 'simplificacao' ? 'Linguagem simplificada e oferta de suporte humano'
+              : 'Antecipação dos próximos passos para reduzir fricção',
+          aindaAberto ? 'pendente' : 'resolvido', numero, ts(new Date(quando.getTime() + 90000))
+        )
       }
 
       totalHistorico++

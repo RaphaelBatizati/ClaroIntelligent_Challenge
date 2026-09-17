@@ -18,25 +18,34 @@ const ROTULO_CANAL = {
   site: 'Site', app: 'App Minha Claro', whatsapp: 'WhatsApp', callcenter: 'Call Center',
 }
 
-function corDoIndice(v) {
+// A tela inteira fala em percentual de atendimentos com atrito — é a leitura
+// que permite comparar canais de volumes muito diferentes. Os cortes abaixo
+// dividem a escala em três faixas de leitura imediata.
+const FAIXA_ALTA = 60
+const FAIXA_MEDIA = 35
+
+function corDaCelula(v) {
   if (v === null || v === undefined) return '#F9FAFB'
-  if (v >= 65) return '#FEE2E2'
-  if (v >= 40) return '#FEF3C7'
-  if (v >= 20) return '#D1FAE5'
+  if (v >= 80) return '#FECACA'
+  if (v >= FAIXA_ALTA) return '#FEE2E2'
+  if (v >= FAIXA_MEDIA) return '#FEF3C7'
+  if (v >= 15) return '#D1FAE5'
   return '#F0FDF4'
 }
 function corDoTexto(v) {
   if (v === null || v === undefined) return '#D1D5DB'
-  if (v >= 65) return '#B91C1C'
-  if (v >= 40) return '#92400E'
-  if (v >= 20) return '#065F46'
+  if (v >= FAIXA_ALTA) return '#B91C1C'
+  if (v >= FAIXA_MEDIA) return '#92400E'
+  if (v >= 15) return '#065F46'
   return '#14532D'
 }
 function corDaBarra(v) {
-  if (v >= 65) return '#EF4444'
-  if (v >= 40) return '#F59E0B'
+  if (v >= FAIXA_ALTA) return '#EF4444'
+  if (v >= FAIXA_MEDIA) return '#F59E0B'
   return '#10B981'
 }
+
+const compacto = (n) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n))
 
 /**
  * Grupo de filtro em chips.
@@ -83,8 +92,13 @@ const TooltipJornada = ({ active, payload }) => {
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-3 text-xs">
       <p className="font-semibold text-gray-700">{d.jornada}</p>
-      <p className="mt-1" style={{ color: corDaBarra(d.indice) }}>Índice de atrito: {d.indice}</p>
-      <p className="text-gray-500">{d.total} atendimento(s) · {d.transferidos} para humano</p>
+      <p className="mt-1 font-bold" style={{ color: corDaBarra(d.pct_atrito) }}>
+        {d.pct_atrito}% dos atendimentos com atrito
+      </p>
+      <p className="text-gray-500 mt-0.5">
+        {d.total.toLocaleString('pt-BR')} atendimento(s) · índice médio {d.indice}/100
+      </p>
+      <p className="text-gray-400">{d.transferidos.toLocaleString('pt-BR')} foram para atendente humano</p>
     </div>
   )
 }
@@ -176,8 +190,9 @@ export default function MapaAtrito() {
             <KPICard label="Pontos de atrito detectados" value={(kpis?.pontos_atrito ?? 0).toLocaleString('pt-BR')}
               numericValue={kpis?.pontos_atrito} icon={AlertTriangle} accentColor="#EF4444"
               subtitle="Sinais do ClaroSense" />
-            <KPICard label="Índice médio de atrito" value={`${kpis?.indice_medio ?? 0}`}
-              numericValue={kpis?.indice_medio} icon={Flame} accentColor="#F59E0B" subtitle="Escala 0–100" />
+            <KPICard label="Atendimentos com atrito" value={`${kpis?.pct_com_atrito ?? 0}%`}
+              numericValue={kpis?.pct_com_atrito} icon={Flame} accentColor="#F59E0B"
+              subtitle={`Índice médio ${kpis?.indice_medio ?? 0}/100`} />
             <KPICard label="Resolvidos sem atendente" value={kpis?.taxa_recuperacao !== null ? `${kpis?.taxa_recuperacao}%` : '—'}
               numericValue={kpis?.taxa_recuperacao} icon={TrendingUp} accentColor="#10B981"
               subtitle="Taxa de contenção" />
@@ -185,16 +200,17 @@ export default function MapaAtrito() {
 
           <div className="grid grid-cols-2 gap-4">
             {/* ── Índice por jornada ────────────────────────── */}
-            <ChartCard title="Índice de atrito por jornada"
-              subtitle={`Média do score final · ${dados?.por_jornada?.length || 0} jornada(s) no recorte`}>
+            <ChartCard title="Atrito por jornada"
+              subtitle={`% dos atendimentos que passaram do limiar de atrito · ${dados?.por_jornada?.length || 0} jornada(s)`}>
               <ResponsiveContainer width="100%" height={Math.max(220, (dados?.por_jornada?.length || 1) * 26)}>
                 <BarChart data={dados?.por_jornada || []} layout="vertical" barSize={14}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" horizontal={false} />
-                  <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                  <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`}
+                    tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
                   <YAxis type="category" dataKey="jornada" width={165} tick={{ fontSize: 9, fill: '#6B7280' }} axisLine={false} tickLine={false} />
                   <Tooltip content={<TooltipJornada />} cursor={{ fill: '#F9FAFB' }} />
-                  <Bar dataKey="indice" radius={[0, 5, 5, 0]}>
-                    {(dados?.por_jornada || []).map((d, i) => <Cell key={i} fill={corDaBarra(d.indice)} />)}
+                  <Bar dataKey="pct_atrito" radius={[0, 5, 5, 0]}>
+                    {(dados?.por_jornada || []).map((d, i) => <Cell key={i} fill={corDaBarra(d.pct_atrito)} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -229,7 +245,7 @@ export default function MapaAtrito() {
               )}
 
               <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                {[['Alta', '≥ 65', '#FEE2E2', '#B91C1C'], ['Média', '40–64', '#FEF3C7', '#92400E'], ['Baixa', '< 40', '#D1FAE5', '#065F46']].map(([t, f, bg, cor]) => (
+                {[['Crítico', '≥ 60%', '#FEE2E2', '#B91C1C'], ['Atenção', '35–59%', '#FEF3C7', '#92400E'], ['Saudável', '< 35%', '#D1FAE5', '#065F46']].map(([t, f, bg, cor]) => (
                   <div key={t} className="p-2 rounded-lg" style={{ backgroundColor: bg }}>
                     <div className="text-xs font-bold" style={{ color: cor }}>{t}</div>
                     <div className="text-[10px]" style={{ color: cor, opacity: 0.7 }}>{f}</div>
@@ -241,7 +257,7 @@ export default function MapaAtrito() {
 
           {/* ── Mapa de calor ─────────────────────────────── */}
           <ChartCard title="Mapa de calor — jornada × canal"
-            subtitle="Índice médio de atrito e volume por cruzamento. Células sem atendimento ficam vazias.">
+            subtitle={`% dos atendimentos com atrito acima de ${dados?.heatmap?.limiar ?? 40}/100 em cada cruzamento. Passe o mouse para ver o volume.`}>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
@@ -250,29 +266,54 @@ export default function MapaAtrito() {
                     {dados?.heatmap?.canais?.map(c => (
                       <th key={c.chave} className="pb-3 px-2 text-center text-gray-600 font-semibold">{c.rotulo}</th>
                     ))}
+                    <th className="pb-3 pl-3 text-right text-gray-400 font-medium">Volume</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {dados?.heatmap?.linhas?.map(linha => (
-                    <tr key={linha.jornada}>
-                      <td className="py-1.5 pr-4 text-gray-600 font-medium">{linha.jornada}</td>
-                      {linha.celulas.map(cel => (
-                        <td key={cel.canal} className="py-1.5 px-2 text-center">
-                          <span
-                            className="inline-flex flex-col items-center justify-center w-16 h-9 rounded-lg transition-all hover:scale-105 cursor-default"
-                            style={{ backgroundColor: corDoIndice(cel.indice), color: corDoTexto(cel.indice) }}
-                            title={cel.total ? `${cel.total} atendimento(s) · índice ${cel.indice}` : 'Sem atendimento neste cruzamento'}
-                          >
-                            <span className="text-xs font-bold leading-none">{cel.indice ?? '—'}</span>
-                            {cel.total > 0 && <span className="text-[8px] opacity-60 leading-none mt-0.5">{cel.total}x</span>}
-                          </span>
+                  {dados?.heatmap?.linhas?.map(linha => {
+                    // O pior canal da linha ganha um contorno: é a leitura que a
+                    // tela existe para entregar — onde esta jornada dói mais.
+                    const pior = Math.max(...linha.celulas.map(c => c.pct_atrito ?? -1))
+                    return (
+                      <tr key={linha.jornada}>
+                        <td className="py-1.5 pr-4 text-gray-600 font-medium">{linha.jornada}</td>
+                        {linha.celulas.map(cel => (
+                          <td key={cel.canal} className="py-1.5 px-2 text-center">
+                            <span
+                              className="inline-flex flex-col items-center justify-center w-16 h-9 rounded-lg transition-all hover:scale-105 cursor-default"
+                              style={{
+                                backgroundColor: corDaCelula(cel.pct_atrito),
+                                color: corDoTexto(cel.pct_atrito),
+                                outline: cel.pct_atrito === pior && pior >= FAIXA_MEDIA ? '1.5px solid #B91C1C' : 'none',
+                              }}
+                              title={cel.total
+                                ? `${cel.com_atrito.toLocaleString('pt-BR')} de ${cel.total.toLocaleString('pt-BR')} atendimentos com atrito · índice médio ${cel.indice}/100`
+                                : 'Sem atendimento neste cruzamento'}
+                            >
+                              <span className="text-xs font-bold leading-none">
+                                {cel.pct_atrito === null ? '—' : `${cel.pct_atrito}%`}
+                              </span>
+                              {cel.total > 0 && (
+                                <span className="text-[8px] opacity-60 leading-none mt-0.5">{compacto(cel.total)}</span>
+                              )}
+                            </span>
+                          </td>
+                        ))}
+                        <td className="py-1.5 pl-3 text-right text-[10px] text-gray-400 tabular-nums">
+                          {linha.total.toLocaleString('pt-BR')}
                         </td>
-                      ))}
-                    </tr>
-                  ))}
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
+
+            <p className="text-[10px] text-gray-400 leading-snug mt-3 pt-2 border-t border-gray-100">
+              O número é a <strong>fatia dos atendimentos daquele cruzamento que deu problema</strong>, não o
+              volume — é assim que se compara um canal que recebe 30 mil contatos com outro que recebe 10 mil.
+              O contorno marca o canal em que cada jornada dói mais.
+            </p>
           </ChartCard>
         </>
       )}

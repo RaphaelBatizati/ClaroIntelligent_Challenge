@@ -237,9 +237,9 @@ O `npm run seed` também popula o painel para que as telas de monitoramento não
 
 - **7 clientes aguardando** no Console do Atendente, com gravidade, tipo de serviço e risco de
   churn variados
-- **~560 atendimentos** distribuídos nos últimos 30 dias, com canal, jornada, persona e score
-  coerentes — é o que faz os filtros de período (última hora, 1 dia, 7 e 30 dias), o mapa de calor e
-  o Monitor de Conversas terem o que mostrar
+- **~84 mil atendimentos** distribuídos nos últimos 30 dias — volume de um portal de operadora de
+  verdade, com canal, jornada, persona e score coerentes entre si. É o que faz os filtros de período
+  (última hora, 1 dia, 7 e 30 dias), o mapa de calor e o Monitor de Conversas terem o que mostrar
 - Tudo determinístico: rodar o seed de novo produz exatamente o mesmo painel
 
 ## Resetar o banco de dados
