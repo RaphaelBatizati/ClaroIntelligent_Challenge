@@ -144,7 +144,7 @@ sobe o suficiente para justificar um humano, mas **sem** chegar ao nível críti
 Canal **Site**, nesta ordem (as falas estão no painel lateral, é só clicar):
 
 1. `minha internet fica caindo toda hora` → score **0**, diagnóstico normal
-2. `isso é frustrante, já tentei reiniciar o modem várias vezes` → *linguagem de frustração* **+28**
+2. `isso é frustrante, já tentei de tudo e continua caindo` → *linguagem de frustração* **+28**
 3. `prefiro falar com uma pessoa, por favor` → *pedido de atendente* **+35** → score **63**
 
 Resultado: entra na fila com prioridade **média**, risco de churn **44% (moderado)** e nível de
@@ -182,11 +182,20 @@ No quarto turno o score cruza o limiar de **80** e o sistema transfere sozinho, 
 chegar no topo da fila.
 
 ### J — Identificação em duas etapas (só no WhatsApp)
-Escolha qualquer cliente, canal **WhatsApp**, e mande a primeira mensagem.
+Escolha qualquer cliente, canal **WhatsApp**, e mande a primeira mensagem — um `Oi` basta.
 
 Antes de qualquer dado do contrato, o sistema reconhece o **número cadastrado** e envia um código de
-6 dígitos por SMS — exibido como **SMS simulado** (só no protótipo). Teste um código errado para ver
-o contador de tentativas; com o correto, o fluxo **retoma sozinho** a intenção original.
+6 dígitos por SMS, exibido como **SMS simulado** (só no protótipo). Nos roteiros com falas prontas,
+o envio do código vira o **passo 2 da lista**, já preenchido com o código recebido.
+
+O que dá para mostrar aqui:
+
+- **Código errado** → contador de tentativas; na terceira, o desafio é bloqueado
+- **Escrever outra coisa antes do código** → o assistente **registra a demanda** ("já anotei: você
+  quer resolver o problema de conexão") e continua pedindo a confirmação; na segunda vez, oferece
+  reenvio
+- **Escrever `reenviar`** → emite um código novo e invalida o anterior
+- **Código correto** → o fluxo **retoma sozinho** a demanda mais recente, não a mensagem de abertura
 
 Nos canais Site, App e Call Center **não há segundo fator**: a autenticação é do próprio canal.
 

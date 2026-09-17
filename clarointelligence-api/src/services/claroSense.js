@@ -64,7 +64,7 @@ const NEGATIVO_REGEX = /\b(absurdo|horr[ií]vel|p[eé]ssimo|rid[ií]culo|inadmis
 // régua passa em branco justamente com quem fala de forma mais educada.
 const HUMANO_REGEX = /\b((falar|conversar|atendimento)\s*(com\s*)?(um|uma|umas|uns)?\s*(humano|atendente|pessoa|gerente|supervisor|especialista)|prefiro\s*(falar|um)|quero\s*(um|uma)?\s*(atendente|humano|pessoa)|chamar?\s*(um|uma)?\s*(atendente|pessoa)|atendimento\s*humano|me\s*transfere|transferir\s*para\s*(um|uma)?\s*(humano|atendente|pessoa))\b/i
 
-const CANCELAMENTO_REGEX = /\b(cancel[ao]r?|rescind|encerrar\s*(o\s*)?(plano|contrato)|quero\s*sair|mudar\s*de\s*operadora|portar\s*para|vivo|tim\b|oi\s*fibra)\b/i
+const CANCELAMENTO_REGEX = /\b(cancel\w*|rescind\w*|encerrar\s*(o\s*)?(plano|contrato)|quero\s*sair|mudar\s*de\s*operadora|portar\s*para|vivo|tim\b|oi\s*fibra)\b/i
 
 /** Caixa alta sustentada também conta como escalada de tom. */
 function temCaixaAlta(texto) {
@@ -103,9 +103,12 @@ function calcular(sessao, textoCliente, historico, intencaoAtual, contextoMemori
     somar('repeticao_intencao', `Intenção "${intencaoAtual}" repetida ${repInt}x nesta sessão`)
   }
 
-  // Sinal 2 — mensagem monossilábica depois de já haver conversa
+  // Sinal 2 — mensagem monossilábica depois de já haver conversa.
+  // Um código de verificação é curto por natureza: digitar os 6 dígitos que o
+  // próprio sistema pediu é colaboração, não impaciência.
   const palavras = textoCliente.trim().split(/\s+/).length
-  if (palavras <= 3 && historico.length > 1) {
+  const ehCodigo = /^\d{4,8}$/.test(textoCliente.trim())
+  if (palavras <= 3 && historico.length > 1 && !ehCodigo) {
     somar('monossilabico', `Mensagem com ${palavras} palavra(s)`)
   }
 

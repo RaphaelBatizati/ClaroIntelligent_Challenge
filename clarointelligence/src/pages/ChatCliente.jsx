@@ -30,32 +30,15 @@ const CANAL_CONFIG = {
   },
 }
 
-// Roteiros de demonstração. G, H e I são conversas completas, com falas na
-// ordem exata — é o que se usa para gravar o pitch sem improvisar.
-const CLIENTES_ROTEIRO = [
-  { id: 'cli-ana-souza', nome: 'Ana Souza', initials: 'AS', cor: '#3B82F6', roteiro: 'A', persona: 'intermediario', plano: 'Fibra 500 Mega', titulo: 'Continuidade entre canais', dica: 'Tente: "minha internet está lenta" — e depois troque de canal para ver o ClaroMemory recuperar o contexto' },
-  { id: 'cli-carlos-mota', nome: 'Carlos Mota', initials: 'CM', cor: '#8B5CF6', roteiro: 'B', persona: 'digital', plano: '4 contratos em 3 linhas', titulo: 'Desambiguação multiproduto', dica: 'Tente: "quero a segunda via" — ele tem 4 contratos, o sistema vai perguntar qual' },
-  { id: 'cli-fernanda-lima', nome: 'Fernanda Lima', initials: 'FL', cor: '#F59E0B', roteiro: 'C', persona: 'assistido', plano: 'Fibra 350 Mega', titulo: 'ClaroSense → fila humana', dica: 'Tente: "já tentei várias vezes" e depois "ISSO É UM ABSURDO, quero falar com humano"' },
-  { id: 'cli-joao-santos', nome: 'João Santos', initials: 'JS', cor: '#10B981', roteiro: 'D', persona: 'intermediario', plano: 'Fibra 500 + Max Flex', titulo: 'Autoatendimento completo', dica: 'Tente: "quero pagar minha fatura" e confirme — resolve sem atendente' },
-  { id: 'cli-roberto-alves', nome: 'Roberto Alves', initials: 'RA', cor: '#EC4899', roteiro: 'E', persona: 'informal', plano: 'Controle 40GB', titulo: 'Call center → chat (protocolo)', dica: 'Tente: "e aí, tenho que pagar essa conta?" — ele tem protocolo aberto no call center' },
-  { id: 'cli-vega-solucoes', nome: 'Vega Soluções', initials: 'VS', cor: '#0EA5E9', roteiro: 'F', persona: 'digital', plano: 'Empresarial: 18 chips + link dedicado', titulo: 'Cliente empresarial (CNPJ)', dica: 'Tente: "o link dedicado está oscilando" — chip empresarial + link dedicado com SLA' },
-
-  {
-    id: 'cli-helena-duarte', nome: 'Helena Duarte', initials: 'HD', cor: '#A855F7', roteiro: 'G',
-    persona: 'assistido', plano: 'Fibra 350 Mega (residencial)',
-    titulo: 'Guiada — problema de internet → atendente',
-    dica: 'Conversa completa: o atrito sobe, ela pede uma pessoa, mas não chega ao nível crítico.',
-    script: [
-      'minha internet fica caindo toda hora',
-      'isso é frustrante, já tentei reiniciar o modem várias vezes',
-      'prefiro falar com uma pessoa, por favor',
-    ],
-  },
+// Clientes do roteiro do pitch (docs/ROTEIRO_PITCH.md), na ordem em que
+// aparecem na gravação. As falas de cada um ficam clicáveis no painel lateral,
+// para não haver erro de digitação no meio da demonstração.
+const CLIENTES_PITCH = [
   {
     id: 'cli-tiago-ramos', nome: 'Tiago Ramos', initials: 'TR', cor: '#14B8A6', roteiro: 'H',
     persona: 'informal', plano: 'Claro Pós 50GB (móvel)',
     titulo: 'Informal — paga a conta sozinho no chat',
-    dica: 'Conversa completa: resolve tudo no chat, sem fila e sem atendente.',
+    dica: 'Bloco 1 do pitch: resolve tudo no chat, sem fila e sem atendente.',
     script: [
       'e aí, quero pagar a conta do meu celular',
       'isso, pode gerar o pix',
@@ -65,7 +48,7 @@ const CLIENTES_ROTEIRO = [
     id: 'cli-nexo-log', nome: 'Nexo Log Transportes', initials: 'NL', cor: '#F97316', roteiro: 'I',
     persona: 'digital', plano: 'Fibra 500 empresarial (CNPJ)',
     titulo: 'Técnica — erro repetido → transbordo automático',
-    dica: 'Conversa completa: a repetição e o tom elevam o score até a transferência automática.',
+    dica: 'Bloco 2 do pitch: a repetição e o tom elevam o score até a transferência automática.',
     script: [
       'o portal empresarial retorna erro CLR-4032 ao emitir a fatura',
       'continua o mesmo erro, já limpei o cache e troquei de navegador',
@@ -73,7 +56,42 @@ const CLIENTES_ROTEIRO = [
       'ISSO É INACEITÁVEL, TEMOS SLA CONTRATADO E VOU ACIONAR A ANATEL',
     ],
   },
+  {
+    id: 'cli-helena-duarte', nome: 'Helena Duarte', initials: 'HD', cor: '#A855F7', roteiro: 'G',
+    persona: 'assistido', plano: 'Fibra 350 Mega (residencial)',
+    titulo: 'Guiada — problema de internet → atendente',
+    dica: 'Extensão do pitch: o atrito sobe, ela pede uma pessoa, mas não chega ao nível crítico. No WhatsApp, serve também para mostrar a identificação por SMS.',
+    script: [
+      'minha internet fica caindo toda hora',
+      'isso é frustrante, já tentei de tudo e continua caindo',
+      'prefiro falar com uma pessoa, por favor',
+    ],
+  },
+  {
+    id: 'cli-roberto-alves', nome: 'Roberto Alves', initials: 'RA', cor: '#EC4899', roteiro: 'E',
+    persona: 'informal', plano: 'Claro Controle 40GB (móvel)',
+    titulo: 'Call center → chat, pelo protocolo',
+    dica: 'Extensão do pitch: ele tem protocolo aberto no call center há 3h — o chat retoma de onde parou.',
+    script: [
+      'e aí, tenho que pagar essa conta?',
+    ],
+  },
 ]
+
+// Demais roteiros documentados em docs/COMO_RODAR.md. Ficam fora da lista
+// principal para a tela do pitch não ter distração, mas continuam acessíveis.
+const CLIENTES_EXTRAS = [
+  { id: 'cli-ana-souza', nome: 'Ana Souza', initials: 'AS', cor: '#3B82F6', roteiro: 'A', persona: 'intermediario', plano: 'Fibra 500 Mega', titulo: 'Continuidade entre canais', dica: 'Tente: "minha internet está lenta" — e depois troque de canal para ver o ClaroMemory recuperar o contexto' },
+  { id: 'cli-carlos-mota', nome: 'Carlos Mota', initials: 'CM', cor: '#8B5CF6', roteiro: 'B', persona: 'digital', plano: '4 contratos em 3 linhas', titulo: 'Desambiguação multiproduto', dica: 'Tente: "quero a segunda via" — ele tem 4 contratos, o sistema vai perguntar qual' },
+  { id: 'cli-fernanda-lima', nome: 'Fernanda Lima', initials: 'FL', cor: '#F59E0B', roteiro: 'C', persona: 'assistido', plano: 'Fibra 350 Mega', titulo: 'ClaroSense → fila humana', dica: 'Tente: "já tentei várias vezes" e depois "ISSO É UM ABSURDO, quero falar com humano"' },
+  { id: 'cli-joao-santos', nome: 'João Santos', initials: 'JS', cor: '#10B981', roteiro: 'D', persona: 'intermediario', plano: 'Fibra 500 + Max Flex', titulo: 'Autoatendimento com upgrade', dica: 'Tente: "quero aumentar a velocidade da internet" e confirme' },
+  { id: 'cli-vega-solucoes', nome: 'Vega Soluções', initials: 'VS', cor: '#0EA5E9', roteiro: 'F', persona: 'digital', plano: 'Empresarial: 18 chips + link dedicado', titulo: 'Cliente empresarial (CNPJ)', dica: 'Tente: "o link dedicado está oscilando" — chip empresarial + link dedicado com SLA' },
+]
+
+// No WhatsApp a conversa começa pela identificação: o número é reconhecido e um
+// código sai por SMS. Por isso o roteiro ganha um cumprimento na frente — é ele
+// que dispara o código, antes de qualquer fala sobre o contrato.
+const ABERTURA_WHATSAPP = 'Oi, tudo bem?'
 
 const PERSONA_INFO = {
   digital: { label: 'Digital', cor: '#3B82F6', desc: 'Tom técnico, respostas diretas' },
@@ -304,7 +322,12 @@ function PainelTransparencia({ ultimo }) {
 // ─── Componente principal ───────────────────────────────────────────────────
 export default function ChatCliente() {
   const [canal, setCanal] = useState('site')
-  const [clienteId, setClienteId] = useState('cli-ana-souza')
+  const [clienteId, setClienteId] = useState('cli-tiago-ramos')
+  const [mostrarExtras, setMostrarExtras] = useState(false)
+  // Quantas falas do roteiro já foram enviadas. Contar cliques (e não mensagens)
+  // é o que mantém o destaque correto quando o WhatsApp insere a abertura e o
+  // código de verificação no meio do caminho.
+  const [passoRoteiro, setPassoRoteiro] = useState(0)
   const [sessaoId, setSessaoId] = useState(null)
   const [mensagens, setMensagens] = useState([])
   const [input, setInput] = useState('')
@@ -321,7 +344,21 @@ export default function ChatCliente() {
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const cfg = CANAL_CONFIG[canal]
-  const clienteAtual = CLIENTES_ROTEIRO.find(c => c.id === clienteId)
+  const listaClientes = mostrarExtras ? [...CLIENTES_PITCH, ...CLIENTES_EXTRAS] : CLIENTES_PITCH
+  const clienteAtual = [...CLIENTES_PITCH, ...CLIENTES_EXTRAS].find(c => c.id === clienteId)
+
+  // No WhatsApp o roteiro ganha dois passos na frente: a abertura, que dispara
+  // o código por SMS, e o próprio envio do código. Deixar a confirmação fora da
+  // lista fazia a demonstração travar — quem clicava as falas em sequência
+  // seguia falando com uma sessão que ainda esperava a identificação.
+  const falasRoteiro = !clienteAtual?.script ? null
+    : canal === 'whatsapp'
+      ? [
+        { texto: ABERTURA_WHATSAPP, nota: 'dispara o código por SMS' },
+        { codigo: true, nota: 'confirma a identidade' },
+        ...clienteAtual.script.map(texto => ({ texto })),
+      ]
+      : clienteAtual.script.map(texto => ({ texto }))
   const emFila = estadoFila?.na_fila || estadoFila?.em_atendimento
 
   useEffect(() => {
@@ -339,6 +376,7 @@ export default function ChatCliente() {
   const reiniciar = useCallback(() => {
     setMensagens([]); setSessaoId(null); setUltimoRetorno(null)
     setInput(''); setSmsSimulado(null); setEstadoFila(null); setProtocolo(null)
+    setPassoRoteiro(0)
   }, [])
 
   useEffect(() => { reiniciar() }, [clienteId, canal, reiniciar])
@@ -371,10 +409,11 @@ export default function ChatCliente() {
     return () => clearInterval(intervalo)
   }, [sessaoId, emFila])
 
-  async function enviarMensagem(textoForcado) {
+  async function enviarMensagem(textoForcado, { roteiro = false } = {}) {
     const txt = (textoForcado ?? input).trim()
     if (!txt || carregando) return
     if (!textoForcado) setInput('')
+    if (roteiro) setPassoRoteiro(p => p + 1)
     setCarregando(true)
 
     setMensagens(prev => [...prev, { id: `local-${Date.now()}`, papel: 'cliente', conteudo: txt }])
@@ -460,9 +499,11 @@ export default function ChatCliente() {
         </div>
 
         <div className="bg-white rounded-xl p-3 shadow-sm">
-          <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">Cliente (roteiro)</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">
+            {mostrarExtras ? 'Cliente (roteiro)' : 'Clientes do pitch'}
+          </p>
           <div className="space-y-1">
-            {CLIENTES_ROTEIRO.map(c => (
+            {listaClientes.map(c => (
               <button key={c.id} onClick={() => setClienteId(c.id)}
                 className={`w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left text-[11px] transition-all ${clienteId === c.id ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50'}`}>
                 <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0" style={{ backgroundColor: c.cor }}>
@@ -478,6 +519,13 @@ export default function ChatCliente() {
               </button>
             ))}
           </div>
+
+          {/* Os demais roteiros continuam acessíveis, mas fora do caminho da
+              gravação — a tela do pitch não precisa de distração. */}
+          <button onClick={() => setMostrarExtras(v => !v)}
+            className="w-full mt-2 pt-2 border-t border-gray-100 text-[9px] text-gray-400 hover:text-gray-600">
+            {mostrarExtras ? '− ocultar outros roteiros' : `+ outros ${CLIENTES_EXTRAS.length} roteiros (A–F)`}
+          </button>
         </div>
 
         {clienteAtual && (
@@ -487,20 +535,31 @@ export default function ChatCliente() {
 
             {/* Roteiro guiado: as falas na ordem, clicáveis. Evita erro de
                 digitação na hora da apresentação e mantém o tempo da demo. */}
-            {clienteAtual.script && (
+            {falasRoteiro && (
               <div className="mt-2 pt-2 border-t border-amber-200 space-y-1">
                 <p className="text-[9px] font-bold text-amber-500 uppercase">Falas do roteiro</p>
-                {clienteAtual.script.map((fala, i) => {
-                  const enviadas = mensagens.filter(m => m.papel === 'cliente').length
-                  const proxima = i === enviadas
+                {falasRoteiro.map((fala, i) => {
+                  const proxima = i === passoRoteiro
+                  // O passo do código só existe depois que o SMS simulado chega
+                  const aguardandoSms = fala.codigo && !smsSimulado
+                  const rotulo = fala.codigo
+                    ? (smsSimulado ? `enviar o código ${smsSimulado.codigo}` : 'aguardando o SMS…')
+                    : fala.texto
+
                   return (
-                    <button key={i} onClick={() => enviarMensagem(fala)} disabled={carregando || !apiOnline}
-                      className={`w-full text-left text-[10px] leading-snug px-2 py-1.5 rounded-lg border transition-all disabled:opacity-50 ${
+                    <button key={i}
+                      onClick={() => enviarMensagem(fala.codigo ? smsSimulado.codigo : fala.texto, { roteiro: true })}
+                      disabled={carregando || !apiOnline || aguardandoSms}
+                      className={`w-full text-left text-[10px] leading-snug px-2 py-1.5 rounded-lg border transition-all disabled:opacity-40 ${
                         proxima ? 'bg-white border-amber-300 text-amber-800 font-semibold shadow-sm'
-                          : i < enviadas ? 'bg-amber-100/50 border-transparent text-amber-400 line-through'
+                          : i < passoRoteiro ? 'bg-amber-100/50 border-transparent text-amber-400 line-through'
                             : 'bg-white/60 border-transparent text-amber-600'
                       }`}>
-                      <span className="font-bold mr-1">{i + 1}.</span>{fala}
+                      <span className="font-bold mr-1">{i + 1}.</span>
+                      {fala.codigo ? <span className="font-mono">🔐 {rotulo}</span> : rotulo}
+                      {fala.nota && (
+                        <span className="block text-[9px] font-normal text-amber-500 mt-0.5">{fala.nota}</span>
+                      )}
                     </button>
                   )
                 })}

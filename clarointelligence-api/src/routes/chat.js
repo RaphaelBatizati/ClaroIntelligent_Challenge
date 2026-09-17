@@ -155,16 +155,73 @@ router.post('/mensagem', (req, res) => {
           protocoloSvc.registrarEvento(sessao.protocolo_numero, canal, 'verificacao', 'Identidade confirmada por verificação em duas etapas')
         }
       } else {
-        // Ainda aguardando o código — não seguimos para dado sensível
-        const pedido = `🔐 Ainda preciso do código de 6 dígitos enviado para **${estadoVerif.desafio_pendente.destino_mascarado}** para continuar com segurança.`
+        // Ainda aguardando o código — não seguimos para dado sensível.
+        //
+        // Mas o cliente continua falando enquanto espera, e o que ele diz aqui
+        // costuma ser mais específico do que a mensagem que abriu a conversa.
+        // Registramos a intenção mais recente como motivo do desafio: é ela que
+        // o pipeline vai retomar quando a identidade for confirmada. E a
+        // resposta nomeia a demanda de volta, para não parecer que a mensagem
+        // foi ignorada.
+        const desafio = estadoVerif.desafio_pendente
+        const relevante = intencao && !['geral', 'saudacao'].includes(intencao)
+        if (relevante) {
+          verificacao.atualizarMotivo({ verificacaoId: desafio.id, motivo: intencao })
+        }
+
+        const { persona } = obterPerfil(cliente_id, mensagem)
+
+        // "não chegou", "manda de novo": emite um código novo em vez de insistir
+        if (verificacao.pediuReenvio(mensagem)) {
+          const novo = verificacao.iniciar({
+            sessaoId: sessao.id, clienteId: cliente_id, canal, motivo: desafio.motivo || intencao,
+          })
+          if (novo) {
+            const resposta = `📲 Enviei um **novo código** para **${novo.destino_mascarado}**. O anterior perdeu a validade.`
+            salvarMensagem(db, { sessaoId: sessao.id, papel: 'cliente', conteudo: mensagem, intencao, confianca, protocolo: sessao.protocolo_numero })
+            salvarMensagem(db, { sessaoId: sessao.id, papel: 'sistema', conteudo: resposta, intencao: 'verificacao_2fa', protocolo: sessao.protocolo_numero })
+            return res.json({
+              sessao_id: sessao.id, trace_id: traceId, resposta,
+              intencao: 'verificacao_2fa',
+              intencao_pendente: desafio.motivo || intencao,
+              verificacao: {
+                pendente: true,
+                verificacao_id: novo.verificacao_id,
+                destino_mascarado: novo.destino_mascarado,
+                metodo: novo.metodo,
+                expira_em_minutos: novo.expira_em_minutos,
+                codigo_simulado: novo.codigo_simulado,
+              },
+              score_atrito: sessao.score_atrito, sinais_atrito: [], trechos_memoria: [],
+              intervencao: null, persona,
+              protocolo: sessao.protocolo_numero ? protocoloSvc.formatar(sessao.protocolo_numero) : null,
+            })
+          }
+        }
+
+        // Quantas vezes já cobramos o código nesta sessão — a partir da segunda
+        // o texto muda e oferece o reenvio, em vez de repetir a mesma frase.
+        const jaCobrado = db.prepare(`
+          SELECT COUNT(*) AS n FROM mensagens
+          WHERE sessao_id = ? AND papel = 'sistema' AND intencao_codigo = 'verificacao_2fa'
+        `).get(sessao.id)
+
+        const pedido = verificacao.mensagemAguardando({
+          destino: desafio.destino_mascarado,
+          motivo: relevante ? intencao : desafio.motivo,
+          persona,
+          tentativa: (jaCobrado?.n || 1),
+        })
+
         salvarMensagem(db, { sessaoId: sessao.id, papel: 'cliente', conteudo: mensagem, intencao, confianca, protocolo: sessao.protocolo_numero })
         salvarMensagem(db, { sessaoId: sessao.id, papel: 'sistema', conteudo: pedido, intencao: 'verificacao_2fa', protocolo: sessao.protocolo_numero })
         return res.json({
           sessao_id: sessao.id, trace_id: traceId, resposta: pedido,
           intencao: 'verificacao_2fa',
-          verificacao: { pendente: true, destino_mascarado: estadoVerif.desafio_pendente.destino_mascarado },
+          intencao_pendente: relevante ? intencao : desafio.motivo,
+          verificacao: { pendente: true, destino_mascarado: desafio.destino_mascarado },
           score_atrito: sessao.score_atrito, sinais_atrito: [], trechos_memoria: [],
-          intervencao: null, persona: cliente.perfil_persona,
+          intervencao: null, persona,
           protocolo: sessao.protocolo_numero ? protocoloSvc.formatar(sessao.protocolo_numero) : null,
         })
       }

@@ -211,8 +211,17 @@ function validar({ verificacaoId, sessaoId, codigo }) {
 function statusSessao(sessaoId) {
   try {
     const db = getDb()
+
+    // Desafio vencido deixa de ser pendente aqui, e não só quando alguém tenta
+    // um código. Sem isso a conversa ficaria presa: o pipeline esperaria para
+    // sempre por um código que já não vale mais.
+    db.prepare(`
+      UPDATE verificacoes SET status = 'expirado'
+      WHERE sessao_id = ? AND status = 'pendente' AND datetime('now') > expira_em
+    `).run(sessaoId)
+
     const sessao = db.prepare('SELECT verificado FROM sessoes WHERE id = ?').get(sessaoId)
-    const pendente = db.prepare(`SELECT id, destino_mascarado, metodo, tentativas, max_tentativas FROM verificacoes WHERE sessao_id = ? AND status = 'pendente' ORDER BY created_at DESC LIMIT 1`).get(sessaoId)
+    const pendente = db.prepare(`SELECT id, destino_mascarado, metodo, motivo, tentativas, max_tentativas FROM verificacoes WHERE sessao_id = ? AND status = 'pendente' ORDER BY created_at DESC LIMIT 1`).get(sessaoId)
     return {
       verificado: sessao?.verificado === 1,
       desafio_pendente: pendente || null,
@@ -244,6 +253,90 @@ function mensagemDesafio({ destino, metodo, persona, nome }) {
   return `🔐 **Verificação em duas etapas**\n\nIdentifiquei seu número **${destino}** no cadastro Claro. Para proteger seus dados, enviei um código de 6 dígitos por ${via} para esse mesmo número.\n\nÉ só digitar o código aqui — ele vale por ${TTL_MINUTOS} minutos. 🔒`
 }
 
+/**
+ * Troca o motivo registrado no desafio pendente.
+ *
+ * Enquanto espera o código o cliente continua falando — e o que ele diz depois
+ * costuma ser mais específico do que o "oi" que abriu a conversa. Guardar a
+ * intenção mais recente é o que faz o pipeline retomar o assunto certo assim
+ * que a identidade for confirmada.
+ */
+function atualizarMotivo({ verificacaoId, motivo }) {
+  if (!verificacaoId || !motivo) return
+  try {
+    const db = getDb()
+    db.prepare(`UPDATE verificacoes SET motivo = ? WHERE id = ? AND status = 'pendente'`).run(motivo, verificacaoId)
+  } catch (err) {
+    console.error('[verificacao.atualizarMotivo]', err.message)
+  }
+}
+
+const ASSUNTO_POR_MOTIVO = {
+  segunda_via: 'ver a sua fatura',
+  pagamento: 'pagar a fatura',
+  cancelamento: 'tratar o cancelamento',
+  troca_titularidade: 'alterar a titularidade',
+  portabilidade: 'tratar a portabilidade',
+  upgrade_plano: 'alterar o seu plano',
+  recarga: 'fazer a recarga',
+  franquia: 'ver o consumo da sua franquia',
+  suporte_tecnico: 'resolver o problema de conexão',
+  diagnostico: 'diagnosticar o equipamento',
+  visita_tecnica: 'agendar a visita técnica',
+  roaming: 'tratar o roaming',
+  streaming: 'resolver o acesso ao Claro tv+',
+  atendente_humano: 'te encaminhar para um atendente',
+  consulta_protocolo: 'consultar o protocolo',
+}
+
+/** O cliente está dizendo que o código não chegou? */
+const REENVIO_REGEX = /\b(reenvi\w*|manda\s*(de\s*)?novo|envia\s*(de\s*)?novo|n[aã]o\s*(chegou|recebi|veio)|novo\s*c[oó]digo|outro\s*c[oó]digo|n[aã]o\s*me\s*mandou)\b/i
+
+function pediuReenvio(texto) {
+  return REENVIO_REGEX.test(String(texto || ''))
+}
+
+/**
+ * Resposta para quem escreveu algo que não é o código.
+ *
+ * Repetir a mesma frase a cada mensagem dá a impressão de que o assistente não
+ * leu nada. Duas coisas evitam isso: a demanda é nomeada de volta (o cliente vê
+ * que foi entendido) e, a partir da segunda cobrança, o texto muda e oferece o
+ * reenvio — porque aí a hipótese mais provável é que o SMS não chegou.
+ */
+function mensagemAguardando({ destino, motivo, persona, tentativa = 1 }) {
+  const assunto = ASSUNTO_POR_MOTIVO[motivo]
+  const anotei = assunto
+    ? (persona === 'informal' ? `Boa, já anotei que é pra **${assunto}**. ` : `Já anotei: você quer **${assunto}**. `)
+    : ''
+
+  if (tentativa >= 2) {
+    const saida = `
+
+Se o SMS não chegou, escreva **reenviar** que eu mando outro código.`
+    if (persona === 'assistido') {
+      return `${anotei ? '😊 ' + anotei : ''}Mas eu ainda não recebi o **código de 6 números** — sem ele não posso mostrar seus dados, tá bom?${saida}`
+    }
+    if (persona === 'informal') {
+      return `${anotei}Só que sem o **código de 6 números** eu não consigo seguir 😅${saida}`
+    }
+    return `${anotei}A verificação continua pendente: preciso do **código de 6 dígitos** enviado para **${destino}**.${saida}`
+  }
+
+  if (persona === 'assistido') {
+    return `${anotei ? '😊 ' + anotei : ''}Só falta uma coisinha antes: preciso do **código de 6 números** que enviei por SMS para **${destino}**.
+
+Pode digitar ele aqui pra mim? Assim que confirmar, continuo de onde paramos.`
+  }
+  if (persona === 'informal') {
+    return `${anotei}Só me manda o **código de 6 números** que chegou no SMS do **${destino}** 👇 Aí eu sigo.`
+  }
+  if (persona === 'digital') {
+    return `${anotei}Aguardando o código de 6 dígitos enviado para **${destino}** para liberar os dados do contrato.`
+  }
+  return `${anotei}Para continuar com segurança, preciso do **código de 6 dígitos** que enviei por SMS para **${destino}**. 🔐`
+}
+
 /** Detecta se a mensagem do cliente é (só) um código de verificação. */
 function extrairCodigo(texto) {
   if (!texto) return null
@@ -259,6 +352,9 @@ module.exports = {
   validar,
   statusSessao,
   mensagemDesafio,
+  mensagemAguardando,
+  atualizarMotivo,
+  pediuReenvio,
   extrairCodigo,
   INTENCOES_SENSIVEIS,
   CANAIS_COM_2FA,

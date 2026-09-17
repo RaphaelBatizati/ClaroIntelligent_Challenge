@@ -30,13 +30,17 @@ npm run dev
 3. Feche as notificações do sistema e deixe o zoom em 100%.
 4. Rode o `npm run seed` **imediatamente antes** de gravar: o painel fica idêntico toda vez.
 
+> A lista de clientes do Chat mostra apenas as **quatro personas deste roteiro**. Os demais
+> roteiros (A–F) continuam disponíveis no link *"+ outros 5 roteiros"* no fim da lista — fora do
+> caminho da gravação, para não haver clique errado.
+
 ---
 
 ## Linha do tempo
 
 | Tempo | Tela | Ação | Narração |
 |---|---|---|---|
-| **0:00 – 0:12** | Chat do Cliente | Mostre a barra lateral: canais e os 9 roteiros. Selecione **Tiago Ramos** (Roteiro H). | "Este é o ClaroIntelligence atendendo no chat da Claro. O Tiago é cliente do Pós 50GB e quer pagar a conta." |
+| **0:00 – 0:12** | Chat do Cliente | Mostre a barra lateral: os três canais e as quatro personas do roteiro. Selecione **Tiago Ramos** (Roteiro H). | "Este é o ClaroIntelligence atendendo no chat da Claro. O Tiago é cliente do Pós 50GB e quer pagar a conta." |
 | **0:12 – 0:22** | Chat | Clique na fala **1 — "e aí, quero pagar a conta do meu celular"**. | "Repare no tom: ele escreve de forma informal, e o sistema responde no mesmo registro. Isso é o Persona Engine." |
 | **0:22 – 0:40** | Chat | Aguarde a resposta. Aponte no painel direito: **Persona: Informal**, **Produto resolvido: Claro Pós 50GB**, **Protocolo**. | "Sem eu dizer de qual produto se trata, o sistema resolveu o contrato, abriu protocolo e já trouxe valor e vencimento." |
 | **0:40 – 0:58** | Chat | Clique na fala **2 — "isso, pode gerar o pix"**. Aponte o selo verde **"Resolvido no autoatendimento — sem atendente humano"**. | "Duas mensagens: PIX gerado, pagamento registrado e protocolo encerrado. Nenhum atendente foi acionado — é daqui que sai a taxa de contenção." |
@@ -90,18 +94,29 @@ Para quem prefere decorar em vez de ler a tabela — **376 palavras, ~2min25 em 
 
 ## Se sobrar tempo (versão de 3min)
 
-Acrescente o **Roteiro J — identificação no WhatsApp** entre os dois blocos (+25s):
+Acrescente o **Roteiro G/J — Helena no WhatsApp** entre os dois blocos (+40s). No canal WhatsApp o
+roteiro lateral ganha dois passos na frente, então continua sendo só clicar em sequência:
 
-1. Troque o canal para **WhatsApp** e escolha **Helena Duarte**
-2. Digite `minha internet fica caindo`
-3. Mostre o cartão de **SMS simulado** e diga: *"No WhatsApp o canal é o próprio número, e posse do
-   número não é prova de identidade. Antes de qualquer dado do contrato, o sistema identifica pelo
-   cadastro e confirma por SMS. Nos canais com login, isso não se repete."*
-4. Clique em **Usar este código** e siga
+| Passo | O que clicar | O que acontece |
+|---|---|---|
+| 1 | `Oi, tudo bem?` | O número é reconhecido no cadastro e o código sai por SMS |
+| 2 | `🔐 enviar o código ######` | Identidade confirmada — o botão só habilita depois que o SMS chega |
+| 3 | `minha internet fica caindo toda hora` | Diagnóstico, score 0 |
+| 4 | `isso é frustrante, já tentei de tudo e continua caindo` | Linguagem de frustração, **+28** |
+| 5 | `prefiro falar com uma pessoa, por favor` | Pedido de atendente, **+35** → score **63**, entra na fila com prioridade média |
 
-Ou o **Roteiro E — call center → chat** (+20s): selecione **Roberto Alves**, canal Site, e mande
-`e aí, tenho que pagar essa conta?`. O sistema abre com *"Localizei seu protocolo, aberto há 3h no
-Call Center"* — e mostra que a jornada atravessa canais.
+Narração sugerida no passo 1: *"No WhatsApp o canal é o próprio número, e posse do número não é
+prova de identidade. Antes de qualquer dado do contrato — inclusive antes de dizer que existe um
+chamado aberto em outro canal — o sistema identifica pelo cadastro e confirma por SMS. Nos canais
+com login, isso não se repete."*
+
+E no passo 5: *"Aqui o atrito é real, mas não é crise: 63 de 100, risco de cancelamento moderado. A
+pessoa entra na fila para resolver, não para apagar incêndio — e por isso entra com prioridade
+média, atrás do caso da Nexo Log."*
+
+Ou o **Roteiro E — call center → chat** (+20s): selecione **Roberto Alves**, canal Site, e clique a
+única fala do roteiro. O sistema abre com *"Localizei seu protocolo, aberto há 3h no Call Center"* —
+e mostra que a jornada atravessa canais.
 
 ---
 
@@ -111,5 +126,7 @@ Call Center"* — e mostra que a jornada atravessa canais.
 |---|---|---|
 | A fila já aparece com casos antes de eu provocar o transbordo | É intencional — o seed povoa 7 casos para a tela não ficar vazia | Se quiser a fila vazia, use o filtro de **tipo de serviço** para isolar o caso da demo |
 | O aviso "Localizei seu protocolo" aparece numa conversa onde não deveria | Sobrou sessão de um ensaio anterior | Rode `npm run seed` de novo |
+| No WhatsApp o assistente fica pedindo o código e não responde as falas | O passo 2 do roteiro (envio do código) foi pulado | Clique o passo `🔐 enviar o código`; ele fica destacado até ser usado. O assistente segue registrando o que você escreveu — repare que ele nomeia a demanda de volta |
+| O SMS simulado não chegou | Sessão antiga, código já expirado (5 min) | Escreva `reenviar` no chat: o sistema emite um código novo |
 | O Console não mostra o caso novo | O polling é de 3 segundos | Aguarde um instante; não recarregue a página |
 | A resposta demora a aparecer | É o efeito de digitação, não latência | Nada a fazer — ele existe para a leitura acompanhar |

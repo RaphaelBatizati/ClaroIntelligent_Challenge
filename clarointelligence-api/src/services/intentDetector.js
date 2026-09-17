@@ -9,11 +9,16 @@ const INTENTS = [
 
   { codigo: 'atendente_humano',   regex: /\b((falar|conversar)\s*com\s*(um|uma|uns|umas)?\s*(humano|atendente|pessoa|gerente|supervisor|especialista)|prefiro\s*(falar|um\s*atendente)|quero\s*(um|uma)?\s*(atendente|humano|pessoa\s*de\s*verdade)|atendimento\s*humano|me\s*transfere|chamar?\s*(um|uma)?\s*(atendente|pessoa))\b/i, peso: 11 },
 
-  { codigo: 'cancelamento',       regex: /\b(cancel|rescind|desist|encerrar\s*(o\s*)?(plano|contrato|conta)|n[aã]o\s*quero\s*mais|quero\s*sair|mudar\s*de\s*operadora)\b/i, peso: 10 },
+  // Radical + \w*: `\bcancel\b` nunca casava com "cancelar" nem "cancelamento",
+  // porque a fronteira de palavra exige um não-letra logo depois do radical.
+  { codigo: 'cancelamento',       regex: /\b(cancel\w*|rescind\w*|desist\w*|encerrar\s*(o\s*)?(plano|contrato|conta)|n[aã]o\s*quero\s*mais|quero\s*sair|mudar\s*de\s*operadora)\b/i, peso: 10 },
 
   { codigo: 'pagamento',          regex: /\b(pagar|pagamento|quitar|quero\s*pagar|pagar\s*(a\s*)?(conta|fatura)|pix|d[eé]bito\s*autom[aá]tico|cart[aã]o\s*de\s*cr[eé]dito)\b/i, peso: 9 },
 
-  { codigo: 'suporte_tecnico',    regex: /\b(lenta|lentid[aã]o|caiu|sem\s*sinal|sem\s*internet|n[aã]o\s*funciona|travando|falhou|problema|erro|n[aã]o\s*abre|queda|instabilidade|offline|oscila)\b/i, peso: 9 },
+  // "minha internet fica caindo" é a forma mais comum de relatar queda, e o
+  // gerúndio não estava coberto — a frase caía em 'geral' e o atendimento
+  // começava sem saber do que se tratava.
+  { codigo: 'suporte_tecnico',    regex: /\b(lenta|lentid[aã]o|cai(u|ndo|)?\b|sem\s*sinal|sem\s*internet|sem\s*conex[aã]o|n[aã]o\s*(funciona|conecta|pega|navega)|travando|travou|falhou|problema|erro|n[aã]o\s*abre|queda|quedas|instabilidade|intermitente|offline|oscila(ndo)?)\b/i, peso: 9 },
 
   { codigo: 'troca_titularidade', regex: /\b(titularidade|titular|passar\s*(o\s*plano\s*)?para|transfer[eê]ncia\s*de\s*titularidade)\b/i, peso: 9 },
 
