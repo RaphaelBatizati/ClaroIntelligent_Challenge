@@ -34,6 +34,19 @@ npm run dev
 > roteiros (A–F) continuam disponíveis no link *"+ outros 5 roteiros"* no fim da lista — fora do
 > caminho da gravação, para não haver clique errado.
 
+### Conferência de 15 segundos
+
+Se o reset funcionou, o **Console do Atendente** abre exatamente assim:
+
+| O que olhar | Valor esperado |
+|---|---|
+| Aguardando | **7** |
+| Prioridade alta | **4** |
+| Churn médio na fila | **66%** |
+| Primeiro da fila | **Marcos Aurélio Pinto**, churn 96% |
+
+Qualquer número acima disso significa que sobrou conversa de ensaio: rode `npm run seed` de novo.
+
 ---
 
 ## Linha do tempo
@@ -47,7 +60,7 @@ npm run dev
 | **0:58 – 1:05** | Chat | Selecione **Nexo Log Transportes** (Roteiro I). | "Agora o oposto: um cliente empresarial com um problema que a IA não resolve." |
 | **1:05 – 1:35** | Chat | Clique as falas **1**, **2** e **3** em sequência, esperando cada resposta. Aponte o **score subindo 0 → 0 → 50** e os sinais listados. | "Ele reporta o mesmo erro três vezes. O ClaroSense soma *repetição de intenção*, mais 22, e *linguagem de frustração*, mais 28. O score é auditável: cada ponto tem um motivo." |
 | **1:35 – 1:50** | Chat | Clique a fala **4** (a em caixa alta). Aponte **score 100**, **risco de churn 93%** e o cartão da **fila com posição e tempo**. | "Caixa alta e ameaça de acionar a Anatel: mais 35. O score cruza 80 e o sistema transfere sozinho — ninguém precisou pedir um atendente." |
-| **1:50 – 2:00** | **Console do Atendente** | Troque de aba. Aponte o caso da **Nexo Log no topo da fila**, com etiqueta ALTA e churn 93%. | "Do outro lado, o Console. A fila é ordenada por gravidade e, dentro dela, por risco de cancelamento — quem está mais perto de sair é atendido primeiro." |
+| **1:50 – 2:00** | **Console do Atendente** | Troque de aba. A **Nexo Log aparece em 2º**, com etiqueta ALTA e churn 93% — atrás de um pedido de cancelamento com 96%. | "Do outro lado, o Console. A fila é ordenada por gravidade e, dentro dela, por risco de cancelamento. A Nexo Log entrou agora e já está em segundo, atrás de um cliente que pediu cancelamento com 96% de risco — não de quem chegou antes." |
 | **2:00 – 2:12** | Console | Clique no caso. Mostre o painel direito: protocolo, linha do tempo, sinais de atrito e portfólio. | "Antes da primeira palavra, o atendente já tem o protocolo, o histórico completo e o motivo da transferência. O cliente não vai repetir nada." |
 | **2:12 – 2:25** | Console → Chat | Clique **Assumir atendimento**, escreva *"Boa tarde, sou o Raphael da retenção. Já estou com o chamado do erro CLR-4032 aberto aqui."* e envie. Volte à aba do Chat. | "Assumo a conversa e respondo. E na tela do cliente a mensagem chega ao vivo, identificada como atendente humano." |
 | **2:25 – 2:30** | Chat | Aponte a mensagem azul do atendente no chat do cliente. | "Da IA à pessoa, sem ruptura e com o mesmo protocolo. É isso que o ClaroIntelligence entrega." |
@@ -74,7 +87,8 @@ Para quem prefere decorar em vez de ler a tabela — **376 palavras, ~2min25 em 
 > — ninguém precisou pedir um atendente.
 >
 > Do outro lado, o Console. A fila é ordenada por gravidade e, dentro dela, por risco de
-> cancelamento: quem está mais perto de sair é atendido primeiro. Antes da primeira palavra, o
+> cancelamento. A Nexo Log entrou agora e já está em segundo, atrás de um cliente que pediu
+> cancelamento com noventa e seis por cento de risco — não de quem chegou antes. Antes da primeira palavra, o
 > atendente já tem o protocolo, o histórico completo e o motivo da transferência. O cliente não vai
 > repetir nada.
 >
