@@ -7,7 +7,7 @@ const INTENTS = [
 
   { codigo: 'consulta_protocolo', regex: /\b(protocolo|n[uú]mero\s*d[eo]\s*atendimento|chamado\s*(n[uú]mero|aberto)|meu\s*chamado)\b/i, peso: 11 },
 
-  { codigo: 'atendente_humano',   regex: /\b(falar\s*com\s*(um\s*)?(humano|atendente|pessoa|gerente|supervisor)|quero\s*(um\s*)?atendente|atendimento\s*humano|me\s*transfere|chamar?\s*(um\s*)?atendente)\b/i, peso: 11 },
+  { codigo: 'atendente_humano',   regex: /\b((falar|conversar)\s*com\s*(um|uma|uns|umas)?\s*(humano|atendente|pessoa|gerente|supervisor|especialista)|prefiro\s*(falar|um\s*atendente)|quero\s*(um|uma)?\s*(atendente|humano|pessoa\s*de\s*verdade)|atendimento\s*humano|me\s*transfere|chamar?\s*(um|uma)?\s*(atendente|pessoa))\b/i, peso: 11 },
 
   { codigo: 'cancelamento',       regex: /\b(cancel|rescind|desist|encerrar\s*(o\s*)?(plano|contrato|conta)|n[aã]o\s*quero\s*mais|quero\s*sair|mudar\s*de\s*operadora)\b/i, peso: 10 },
 

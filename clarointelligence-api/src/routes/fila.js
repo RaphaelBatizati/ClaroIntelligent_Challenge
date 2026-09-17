@@ -8,13 +8,34 @@ const protocoloSvc = require('../services/protocolo')
 
 const router = Router()
 
-/** Fila completa para o console. ?status=aguardando|em_atendimento|encerrado */
+const STATUS = ['aguardando', 'em_atendimento', 'encerrado']
+const GRAVIDADE = ['alta', 'media', 'baixa']
+const TIPOS = Object.keys(fila.ROTULO_TIPO_SERVICO)
+const CANAIS = ['site', 'app', 'whatsapp', 'callcenter']
+
+/**
+ * Fila para o console.
+ * Filtros: status, gravidade (alta|media|baixa), tipo_servico, canal, churn_min.
+ * Cada valor passa por allowlist antes de chegar na query.
+ */
 router.get('/', (req, res) => {
   try {
-    const { status } = req.query
+    const { status, gravidade, tipo_servico, canal, churn_min } = req.query
+
+    const filtros = {
+      status: STATUS.includes(status) ? status : null,
+      gravidade: GRAVIDADE.includes(gravidade) ? gravidade : null,
+      tipo_servico: TIPOS.includes(tipo_servico) ? tipo_servico : null,
+      canal: CANAIS.includes(canal) ? canal : null,
+      churn_min: churn_min ? Number(churn_min) : null,
+    }
+
     res.json({
       metricas: fila.metricas(),
-      itens: fila.listar(status || null),
+      filtros_aplicados: Object.fromEntries(Object.entries(filtros).filter(([, v]) => v)),
+      facetas: fila.facetas(filtros),
+      tipos_servico: fila.ROTULO_TIPO_SERVICO,
+      itens: fila.listar(filtros),
     })
   } catch (err) {
     console.error('[fila.listar]', err)
@@ -29,7 +50,7 @@ router.get('/metricas', (_req, res) => {
 
 /** Entrada manual na fila — usada pelo botão "falar com atendente" do chat. */
 router.post('/entrar', (req, res) => {
-  const { sessao_id, cliente_id, canal, motivo, score_atrito, protocolo_numero } = req.body
+  const { sessao_id, cliente_id, canal, motivo, score_atrito, risco_churn, intencao, protocolo_numero } = req.body
   if (!sessao_id || !cliente_id) {
     return res.status(400).json({ erro: 'sessao_id e cliente_id são obrigatórios' })
   }
@@ -40,6 +61,8 @@ router.post('/entrar', (req, res) => {
     canal: canal || 'site',
     motivo: motivo || 'Cliente solicitou atendimento humano',
     scoreAtrito: Number(score_atrito) || 0,
+    riscoChurn: Number(risco_churn) || 0,
+    intencao: intencao || null,
     protocoloNumero: protocolo_numero || null,
   })
 

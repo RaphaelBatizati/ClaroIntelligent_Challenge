@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts'
 import { api } from '../services/api'
+import { usePeriodo } from '../contexts/periodo'
 
 const ICONE_SINAL = {
   repeticao_intencao: Repeat,
@@ -177,6 +178,7 @@ function ComoFuncionaScore({ catalogo, limiares }) {
 }
 
 export default function LogClaroSense() {
+  const { periodo, rotulo } = usePeriodo()
   const [sinais, setSinais] = useState(null)
   const [catalogo, setCatalogo] = useState(null)
   const [limiares, setLimiares] = useState(null)
@@ -186,14 +188,14 @@ export default function LogClaroSense() {
 
   useEffect(() => {
     Promise.all([
-      api.sinais(), api.sinaisCatalogo(), api.contencao(), api.segurancaResumo(),
+      api.sinais(periodo), api.sinaisCatalogo(), api.contencao(periodo), api.segurancaResumo(),
     ])
       .then(([s, cat, cont, seg]) => {
         setSinais(s); setCatalogo(cat.sinais); setLimiares(cat.limiares)
         setContencao(cont); setSeguranca(seg); setErro(null)
       })
       .catch(() => setErro('API offline — inicie o backend com npm run server'))
-  }, [])
+  }, [periodo])
 
   const dadosGrafico = (sinais?.por_tipo || []).map(s => ({
     tipo: catalogo?.find(c => c.tipo === s.tipo)?.rotulo || s.tipo.replace(/_/g, ' '),
@@ -208,7 +210,7 @@ export default function LogClaroSense() {
       {/* KPIs */}
       <div className="grid grid-cols-4 gap-4">
         <KPI label="Sinais de atrito detectados" valor={sinais?.por_tipo?.reduce((a, s) => a + s.total, 0) ?? 0}
-          sub="acumulado no banco" cor="#8B5CF6" icon={Brain} />
+          sub={rotulo} cor="#8B5CF6" icon={Brain} />
         <KPI label="Intervenções automáticas" valor={sinais?.intervencoes?.reduce((a, i) => a + i.total, 0) ?? 0}
           sub="antecipação, simplificação e transbordo" cor="#F59E0B" icon={Users} />
         <KPI label="Taxa de contenção" valor={`${contencao?.taxa_contencao_pct ?? 0}%`}

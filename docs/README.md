@@ -4,7 +4,8 @@
 
 | Documento | Conteúdo |
 |---|---|
-| [COMO_RODAR.md](COMO_RODAR.md) | Passo a passo para rodar do zero em outra máquina + **os 8 roteiros de demonstração**, com o que digitar em cada um |
+| [COMO_RODAR.md](COMO_RODAR.md) | Passo a passo para rodar do zero em outra máquina + **os 11 roteiros de demonstração**, com o que digitar em cada um |
+| [ROTEIRO_PITCH.md](ROTEIRO_PITCH.md) | Roteiro cronometrado de 2min30 do Chat do Cliente + Console do Atendente, com narração pronta |
 | [ARQUITETURA.md](ARQUITETURA.md) | As 5 camadas, o pipeline completo de uma mensagem, protocolo, Product Context Resolver, motores, fila humana e autoatendimento |
 | [PRODUTOS.md](PRODUTOS.md) | Catálogo real da Claro (móvel, fibra, tv+, empresas), chaves de identificação por linha e matriz de capacidades |
 | [BANCO_DE_DADOS.md](BANCO_DE_DADOS.md) | Esquema de todas as tabelas do SQLite, relacionamentos e convenções |

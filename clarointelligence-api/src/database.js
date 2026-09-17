@@ -223,6 +223,8 @@ function initSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_sessoes_canal ON sessoes(canal);
     CREATE INDEX IF NOT EXISTS idx_mensagens_sessao ON mensagens(sessao_id);
     CREATE INDEX IF NOT EXISTS idx_protocolos_cliente ON protocolos(cliente_id);
+    CREATE INDEX IF NOT EXISTS idx_protocolos_created ON protocolos(created_at);
+    CREATE INDEX IF NOT EXISTS idx_sinais_sessao ON sinais_atrito(sessao_id);
     CREATE INDEX IF NOT EXISTS idx_fila_status ON fila_atendimento(status);
   `)
 }
@@ -234,6 +236,13 @@ function migrate(db) {
     ['sessoes', 'protocolo_numero', 'TEXT'],
     ['sessoes', 'verificado', 'INTEGER DEFAULT 0'],
     ['sessoes', 'risco_churn', 'REAL DEFAULT 0'],
+    // Retomada de protocolo anterior é anunciada UMA vez por sessão, depois da
+    // identificação — repetir o aviso a cada turno polui a conversa.
+    ['sessoes', 'continuidade_anunciada', 'INTEGER DEFAULT 0'],
+    // Fila: churn e tipo de serviço viram critério de ordenação e filtro no Console
+    ['fila_atendimento', 'risco_churn', 'REAL DEFAULT 0'],
+    ['fila_atendimento', 'tipo_servico', 'TEXT'],
+    ['fila_atendimento', 'produto_linha', 'TEXT'],
     ['clientes', 'tipo_pessoa', "TEXT DEFAULT 'PF'"],
     ['clientes', 'cnpj_mascara', 'TEXT'],
     ['clientes', 'segmento', "TEXT DEFAULT 'pessoal'"],

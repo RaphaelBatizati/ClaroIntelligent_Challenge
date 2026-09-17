@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Headphones, Send, Clock, AlertTriangle, FileText, User,
-  TrendingDown, Package, PhoneOff, Inbox,
+  TrendingDown, Package, PhoneOff, Inbox, Filter, X,
 } from 'lucide-react'
 import { api } from '../services/api'
 
@@ -41,8 +41,13 @@ function ItemFila({ item, ativo, onSelecionar }) {
       </div>
 
       <div className="flex items-center gap-3 text-[10px]">
-        <span className={`flex items-center gap-1 font-semibold ${item.score_atrito >= 80 ? 'text-red-500' : item.score_atrito >= 65 ? 'text-amber-500' : ativo ? 'text-gray-300' : 'text-gray-500'}`}>
+        <span className={`flex items-center gap-1 font-semibold ${item.score_atrito >= 80 ? 'text-red-500' : item.score_atrito >= 65 ? 'text-amber-500' : ativo ? 'text-gray-300' : 'text-gray-500'}`}
+          title="Score de atrito do ClaroSense">
           <AlertTriangle size={9} /> {item.score_atrito}
+        </span>
+        <span className={`flex items-center gap-1 font-semibold ${item.risco_churn >= 70 ? 'text-red-500' : item.risco_churn >= 40 ? 'text-amber-500' : ativo ? 'text-gray-400' : 'text-gray-400'}`}
+          title="Risco de cancelamento — é ele que define a ordem dentro da fila">
+          <TrendingDown size={9} /> {item.risco_churn ?? 0}%
         </span>
         <span className={`flex items-center gap-1 ${ativo ? 'text-gray-400' : 'text-gray-400'}`}>
           <Clock size={9} /> {item.aguardando_ha_min}min
@@ -50,6 +55,10 @@ function ItemFila({ item, ativo, onSelecionar }) {
         {item.posicao > 0 && (
           <span className={`ml-auto font-bold ${ativo ? 'text-white' : 'text-gray-600'}`}>#{item.posicao}</span>
         )}
+      </div>
+
+      <div className={`mt-1.5 inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded ${ativo ? 'bg-white/10 text-gray-300' : 'bg-gray-100 text-gray-500'}`}>
+        {item.tipo_servico_rotulo || 'Atendimento geral'}
       </div>
 
       {item.protocolo_formatado && (
@@ -165,8 +174,97 @@ function PainelContexto({ conversa }) {
   )
 }
 
+const GRAVIDADES = [
+  { chave: 'alta', label: 'Alta', cor: '#EF4444' },
+  { chave: 'media', label: 'Média', cor: '#F59E0B' },
+  { chave: 'baixa', label: 'Baixa', cor: '#10B981' },
+]
+
+/**
+ * Filtros da fila.
+ * Uma operação real não atende "a fila" — atende a fila da sua especialidade,
+ * priorizando quem está mais perto de cancelar. Por isso os dois eixos:
+ * gravidade do atrito e tipo de serviço.
+ */
+function FiltrosFila({ filtros, facetas, tipos, onMudar, onLimpar }) {
+  const ativos = Object.values(filtros).filter(Boolean).length
+
+  const Chip = ({ ativo, cor, children, onClick, total }) => (
+    <button onClick={onClick}
+      className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-medium border transition-all ${
+        ativo ? 'text-white border-transparent' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+      }`}
+      style={ativo ? { backgroundColor: cor || '#111827' } : undefined}>
+      <span>{children}</span>
+      {total !== undefined && (
+        <span className={`font-bold ${ativo ? 'text-white/70' : 'text-gray-400'}`}>{total}</span>
+      )}
+    </button>
+  )
+
+  return (
+    <div className="bg-white rounded-xl p-3 shadow-sm space-y-2.5">
+      <div className="flex items-center gap-1.5">
+        <Filter size={11} className="text-gray-400" />
+        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Filtrar fila</span>
+        {ativos > 0 && (
+          <button onClick={onLimpar} className="ml-auto flex items-center gap-1 text-[9px] font-semibold text-gray-400 hover:text-gray-700">
+            <X size={9} /> limpar
+          </button>
+        )}
+      </div>
+
+      <div>
+        <div className="text-[9px] font-bold text-gray-400 uppercase mb-1">Gravidade do atrito</div>
+        <div className="flex flex-wrap gap-1">
+          {GRAVIDADES.filter(g => (facetas?.gravidade?.[g.chave] || 0) > 0 || filtros.gravidade === g.chave).map(g => (
+            <Chip key={g.chave} ativo={filtros.gravidade === g.chave} cor={g.cor} total={facetas?.gravidade?.[g.chave] || 0}
+              onClick={() => onMudar('gravidade', filtros.gravidade === g.chave ? null : g.chave)}>
+              {g.label}
+            </Chip>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div className="text-[9px] font-bold text-gray-400 uppercase mb-1">Tipo de serviço</div>
+        <div className="flex flex-wrap gap-1">
+          {Object.entries(tipos || {})
+            .filter(([chave]) => (facetas?.tipo_servico?.[chave] || 0) > 0 || filtros.tipo_servico === chave)
+            .map(([chave, rotulo]) => (
+              <Chip key={chave} ativo={filtros.tipo_servico === chave} total={facetas?.tipo_servico?.[chave] || 0}
+                onClick={() => onMudar('tipo_servico', filtros.tipo_servico === chave ? null : chave)}>
+                {rotulo}
+              </Chip>
+            ))}
+        </div>
+      </div>
+
+      <div>
+        <div className="text-[9px] font-bold text-gray-400 uppercase mb-1">Canal de origem</div>
+        <div className="flex flex-wrap gap-1">
+          {Object.entries(facetas?.canal || {}).filter(([, t]) => t > 0).map(([chave, total]) => (
+            <Chip key={chave} ativo={filtros.canal === chave} total={total}
+              onClick={() => onMudar('canal', filtros.canal === chave ? null : chave)}>
+              {CANAL_LABEL[chave] || chave}
+            </Chip>
+          ))}
+        </div>
+      </div>
+
+      <p className="text-[9px] text-gray-400 leading-snug border-t border-gray-100 pt-2">
+        A fila é ordenada por gravidade e, dentro dela, pelo <strong>risco de cancelamento</strong> —
+        quem está mais estressado é atendido primeiro, não quem chegou antes.
+      </p>
+    </div>
+  )
+}
+
 export default function ConsoleAtendente() {
   const [fila, setFila] = useState([])
+  const [facetas, setFacetas] = useState(null)
+  const [tiposServico, setTiposServico] = useState(null)
+  const [filtros, setFiltros] = useState({ gravidade: null, tipo_servico: null, canal: null })
   const [metricas, setMetricas] = useState(null)
   const [selecionado, setSelecionado] = useState(null)
   const [conversa, setConversa] = useState(null)
@@ -178,14 +276,16 @@ export default function ConsoleAtendente() {
 
   const carregarFila = useCallback(async () => {
     try {
-      const dados = await api.fila()
+      const dados = await api.fila(filtros)
       setFila(dados.itens)
       setMetricas(dados.metricas)
+      setFacetas(dados.facetas)
+      setTiposServico(dados.tipos_servico)
       setErro(null)
     } catch {
       setErro('API offline — inicie o backend com npm run server')
     }
-  }, [])
+  }, [filtros])
 
   const carregarConversa = useCallback(async (filaId) => {
     try {
@@ -262,7 +362,7 @@ export default function ConsoleAtendente() {
           { label: 'Aguardando', valor: metricas?.aguardando ?? 0, cor: '#F59E0B', icon: Inbox },
           { label: 'Em atendimento', valor: metricas?.em_atendimento ?? 0, cor: '#0EA5E9', icon: Headphones },
           { label: 'Prioridade alta', valor: metricas?.prioridade_alta ?? 0, cor: '#EF4444', icon: AlertTriangle },
-          { label: 'Espera média', valor: `${metricas?.espera_media_min ?? 0} min`, cor: '#10B981', icon: Clock },
+          { label: 'Churn médio na fila', valor: `${metricas?.churn_medio ?? 0}%`, cor: '#8B5CF6', icon: TrendingDown },
         ].map(m => (
           <div key={m.label} className="bg-white rounded-xl p-3 shadow-sm flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${m.cor}15` }}>
@@ -282,14 +382,24 @@ export default function ConsoleAtendente() {
 
       <div className="flex gap-4 flex-1 min-h-0">
         {/* Fila */}
-        <div className="w-64 flex-shrink-0 flex flex-col gap-2 overflow-y-auto">
-          <div className="text-[10px] font-bold text-gray-400 uppercase px-1">Fila de atendimento</div>
+        <div className="w-72 flex-shrink-0 flex flex-col gap-2 overflow-y-auto">
+          <FiltrosFila
+            filtros={filtros}
+            facetas={facetas}
+            tipos={tiposServico}
+            onMudar={(campo, valor) => setFiltros(f => ({ ...f, [campo]: valor }))}
+            onLimpar={() => setFiltros({ gravidade: null, tipo_servico: null, canal: null })}
+          />
+          <div className="flex items-center gap-2 px-1">
+            <span className="text-[10px] font-bold text-gray-400 uppercase">Fila de atendimento</span>
+            <span className="text-[10px] text-gray-400">{fila.length} caso(s)</span>
+          </div>
           {fila.length === 0 && (
             <div className="bg-white rounded-xl p-6 text-center">
               <Inbox size={24} className="mx-auto text-gray-300 mb-2" />
               <p className="text-[11px] text-gray-400 leading-snug">
-                Nenhum cliente na fila.<br />
-                Provoque um transbordo no Chat do Cliente para ver um caso chegar aqui.
+                Nenhum cliente neste recorte.<br />
+                Limpe os filtros ou provoque um transbordo no Chat do Cliente.
               </p>
             </div>
           )}

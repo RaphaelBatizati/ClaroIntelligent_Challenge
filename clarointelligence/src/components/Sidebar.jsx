@@ -136,7 +136,7 @@ function Sidebar() {
 
         {/* Copyright */}
         <div className="mt-3 pt-3 border-t border-white/5 text-center">
-          <span className="text-white/20 text-[9px]">© 2025 Claro Brasil S.A.</span>
+          <span className="text-white/20 text-[9px]">© 2026 Claro Brasil S.A.</span>
         </div>
       </div>
     </aside>

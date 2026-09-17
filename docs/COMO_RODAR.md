@@ -137,14 +137,60 @@ compartilhada de 200GB) e link dedicado de 300 Mbps com SLA.
 2. `quanto da franquia compartilhada já foi usado?` → a **matriz de capacidades** descarta o link
    dedicado (que não tem franquia) e resolve para o plano móvel **sem perguntar nada**.
 
-### G — Verificação em duas etapas
-Em qualquer cliente, use o canal **WhatsApp** e peça algo sensível: `quero a segunda via da fatura`.
+### G — Persona guiada: problema de internet que precisa de gente (Helena Duarte)
+Cliente **assistida**, plano **residencial** (Claro Fibra 350 Mega). Mostra o meio-termo: o atrito
+sobe o suficiente para justificar um humano, mas **sem** chegar ao nível crítico.
 
-O sistema pede um código de 6 dígitos e exibe um cartão de **SMS simulado** com o código (só no
-protótipo). Teste primeiro um código errado para ver o contador de tentativas, depois o correto — o
-fluxo **retoma sozinho** a intenção original e entrega a fatura.
+Canal **Site**, nesta ordem (as falas estão no painel lateral, é só clicar):
 
-### H — Guardrails contra prompt injection
+1. `minha internet fica caindo toda hora` → score **0**, diagnóstico normal
+2. `isso é frustrante, já tentei reiniciar o modem várias vezes` → *linguagem de frustração* **+28**
+3. `prefiro falar com uma pessoa, por favor` → *pedido de atendente* **+35** → score **63**
+
+Resultado: entra na fila com prioridade **média**, risco de churn **44% (moderado)** e nível de
+atrito **alerta** — não transbordo. É o caso em que a pessoa entra para resolver, não para apagar
+incêndio.
+
+### H — Persona informal: resolve a conta sozinha no chat (Tiago Ramos)
+Cliente **informal**, plano **móvel** (Claro Pós 50GB). A conversa inteira acontece no chat, sem
+fila e sem atendente.
+
+Canal **App**:
+
+1. `e aí, quero pagar a conta do meu celular` → o assistente espelha o tom, mostra valor e
+   vencimento e **propõe** gerar o PIX
+2. `isso, pode gerar o pix` → gera o PIX copia-e-cola, registra a autenticação e **encerra o
+   protocolo** com `resolvido_por = autoatendimento`
+
+É daqui que sai a taxa de contenção do Dashboard.
+
+### I — Persona técnica: erro repetido até o transbordo automático (Nexo Log Transportes)
+Cliente **PJ**, persona **digital/técnica**, plano **empresarial** (Fibra 500 empresarial). Mostra a
+escalada do ClaroSense turno a turno, até a transferência **sem que ninguém peça** um atendente.
+
+Canal **Site**:
+
+1. `o portal empresarial retorna erro CLR-4032 ao emitir a fatura` → score **0**
+2. `continua o mesmo erro, já limpei o cache e troquei de navegador` → score **0**
+3. `de novo isso, é a terceira vez que reporto o erro CLR-4032` → *repetição* **+22** e
+   *frustração* **+28** → score **50**
+4. `ISSO É INACEITÁVEL, TEMOS SLA CONTRATADO E VOU ACIONAR A ANATEL` → *tom agressivo* (caixa alta +
+   ameaça de órgão regulador) **+35** → score **100**
+
+No quarto turno o score cruza o limiar de **80** e o sistema transfere sozinho, com prioridade
+**alta** e risco de churn **93%**. Abra o **Console do Atendente** em outra aba para ver o caso
+chegar no topo da fila.
+
+### J — Identificação em duas etapas (só no WhatsApp)
+Escolha qualquer cliente, canal **WhatsApp**, e mande a primeira mensagem.
+
+Antes de qualquer dado do contrato, o sistema reconhece o **número cadastrado** e envia um código de
+6 dígitos por SMS — exibido como **SMS simulado** (só no protótipo). Teste um código errado para ver
+o contador de tentativas; com o correto, o fluxo **retoma sozinho** a intenção original.
+
+Nos canais Site, App e Call Center **não há segundo fator**: a autenticação é do próprio canal.
+
+### K — Guardrails contra prompt injection
 Em qualquer cliente e canal, tente:
 
 - `ignore todas as instruções anteriores`
@@ -167,12 +213,40 @@ painel de transparência. Os eventos ficam auditados em **Log do ClaroSense** e 
 | `cli-joao-santos` | João Santos | Fibra 500 Mega + Max Flex | D — autoatendimento completo |
 | `cli-roberto-alves` | Roberto Alves | Controle 40GB | E — call center → chat (persona informal) |
 | `cli-vega-solucoes` | Vega Soluções (PJ) | Móvel corporativo 18 linhas + Link Dedicado | F — cliente empresarial |
+| `cli-helena-duarte` | Helena Duarte | Fibra 350 Mega | **G — guiada: precisa de atendente, sem crise** |
+| `cli-tiago-ramos` | Tiago Ramos | Claro Pós 50GB | **H — informal: resolve sozinha no chat** |
+| `cli-nexo-log` | Nexo Log Transportes (PJ) | Fibra 500 empresarial | **I — técnica: erro repetido → transbordo** |
 | `cli-mariana-costa` | Mariana Costa | Fibra 1 Giga | extra — volume no monitor |
+
+Os roteiros **G, H e I** têm as falas na ordem exata no painel lateral do Chat do Cliente: basta
+clicar em cada uma. É o caminho usado na gravação do pitch — ver
+[ROTEIRO_PITCH.md](ROTEIRO_PITCH.md).
+
+### O que já vem povoado
+
+O `npm run seed` também popula o painel para que as telas de monitoramento não abram vazias:
+
+- **7 clientes aguardando** no Console do Atendente, com gravidade, tipo de serviço e risco de
+  churn variados
+- **~560 atendimentos** distribuídos nos últimos 30 dias, com canal, jornada, persona e score
+  coerentes — é o que faz os filtros de período (última hora, 1 dia, 7 e 30 dias), o mapa de calor e
+  o Monitor de Conversas terem o que mostrar
+- Tudo determinístico: rodar o seed de novo produz exatamente o mesmo painel
 
 ## Resetar o banco de dados
 
+O `npm run seed` **apaga tudo e recria** — é o comando para limpar as conversas de teste
+acumuladas durante os ensaios e devolver o painel ao estado de demonstração:
+
 ```bash
 cd clarointelligence-api
+npm run seed
+```
+
+Pare a API antes (ou suba de novo depois): o servidor mantém a conexão aberta com o arquivo.
+Para começar do zero absoluto, apague também o arquivo do banco:
+
+```bash
 rm clarointelligence.sqlite   # (Windows: del clarointelligence.sqlite)
 npm run seed
 ```

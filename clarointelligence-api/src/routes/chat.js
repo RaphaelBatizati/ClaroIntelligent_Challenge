@@ -182,7 +182,52 @@ router.post('/mensagem', (req, res) => {
     const protocolosAbertos = protocoloSvc.protocolosAbertos(cliente_id, canal)
       .filter(p => p.numero !== protocoloNumero)
 
-    // ── 8. Consulta de protocolo pelo número ────────────────────────────────
+    // ── 8. Identificação no WhatsApp (verificação em duas etapas) ───────────
+    // No WhatsApp o número identifica o cliente, mas posse do número não é
+    // prova de identidade. A verificação acontece na ENTRADA: nada do contrato
+    // — nem o histórico de outros canais — é devolvido antes do código.
+    if (verificacao.exigeVerificacao({ canal, sessao })) {
+      const { persona } = obterPerfil(cliente_id, mensagem)
+      const desafio = verificacao.iniciar({
+        sessaoId: sessao.id, clienteId: cliente_id, canal, motivo: intencao,
+      })
+
+      if (desafio) {
+        const resposta = verificacao.mensagemDesafio({
+          destino: desafio.destino_mascarado, metodo: desafio.metodo, persona, nome: cliente.nome,
+        })
+
+        salvarMensagem(db, { sessaoId: sessao.id, papel: 'cliente', conteudo: mensagem, intencao, confianca, protocolo: protocoloNumero })
+        salvarMensagem(db, { sessaoId: sessao.id, papel: 'sistema', conteudo: resposta, intencao: 'verificacao_2fa', protocolo: protocoloNumero })
+
+        protocoloSvc.registrarEvento(protocoloNumero, canal, 'verificacao', `Identificação por SMS solicitada ao número cadastrado (motivo: ${intencao})`)
+
+        return res.json({
+          sessao_id: sessao.id, trace_id: traceId, resposta,
+          intencao: 'verificacao_2fa', confianca_intencao: 0.99,
+          intencao_pendente: intencao,
+          protocolo: protocoloSvc.formatar(protocoloNumero),
+          verificacao: {
+            pendente: true,
+            verificacao_id: desafio.verificacao_id,
+            destino_mascarado: desafio.destino_mascarado,
+            metodo: desafio.metodo,
+            expira_em_minutos: desafio.expira_em_minutos,
+            // Somente no protótipo: em produção o código só existe no SMS
+            codigo_simulado: desafio.codigo_simulado,
+          },
+          score_atrito: sessao.score_atrito, sinais_atrito: [], trechos_memoria: [],
+          intervencao: null, persona,
+        })
+      }
+    }
+
+    // A sessão está identificada o bastante para receber histórico anterior?
+    // (WhatsApp: só depois do código. Demais canais: autenticação do canal.)
+    const podeAnunciarContinuidade =
+      verificacao.sessaoIdentificada({ canal, sessao }) && sessao.continuidade_anunciada !== 1
+
+    // ── 9. Consulta de protocolo pelo número ────────────────────────────────
     const numeroCitado = protocoloSvc.extrairDoTexto(mensagem)
     if (intencao === 'consulta_protocolo' || numeroCitado) {
       const consultado = numeroCitado ? protocoloSvc.buscar(numeroCitado) : (protocolosAbertos[0] || null)
@@ -243,6 +288,11 @@ router.post('/mensagem', (req, res) => {
           protocolo: protocoloSvc.formatar(protocoloNumero),
           protocolo_status: 'resolvido',
           resolvido_por: 'autoatendimento',
+          // O produto já estava resolvido quando a proposta foi criada — o painel
+          // de transparência precisa continuar mostrando sobre qual contrato a
+          // ação foi executada, e não "aguardando desambiguação".
+          produto_foco: proposta.produto_codigo,
+          produto_confirmado: true,
           acao_executada: { tipo: proposta.tipo, valor: executada.valor, detalhe: executada.detalhe },
           score_atrito: sessao.score_atrito, nivel_atrito: 'normal',
           sinais_atrito: [], trechos_memoria: [], intervencao: null, persona,
@@ -289,44 +339,6 @@ router.post('/mensagem', (req, res) => {
 
     protocoloSvc.atualizarContexto(protocoloNumero, { intencao, produtoCodigo: resolucao.produto_foco })
 
-    // ── 11. Verificação em duas etapas para dado sensível ───────────────────
-    if (verificacao.exigeVerificacao({ canal, intencao, sessao })) {
-      const { persona } = obterPerfil(cliente_id, mensagem)
-      const desafio = verificacao.iniciar({
-        sessaoId: sessao.id, clienteId: cliente_id, canal, motivo: intencao,
-      })
-
-      if (desafio) {
-        const resposta = verificacao.mensagemDesafio({
-          destino: desafio.destino_mascarado, metodo: desafio.metodo, persona, intencao,
-        })
-
-        salvarMensagem(db, { sessaoId: sessao.id, papel: 'cliente', conteudo: mensagem, intencao, confianca, protocolo: protocoloNumero })
-        salvarMensagem(db, { sessaoId: sessao.id, papel: 'sistema', conteudo: resposta, intencao: 'verificacao_2fa', protocolo: protocoloNumero })
-
-        protocoloSvc.registrarEvento(protocoloNumero, canal, 'verificacao', `Verificação em duas etapas solicitada para: ${intencao}`)
-
-        return res.json({
-          sessao_id: sessao.id, trace_id: traceId, resposta,
-          intencao: 'verificacao_2fa', confianca_intencao: 0.99,
-          intencao_pendente: intencao,
-          protocolo: protocoloSvc.formatar(protocoloNumero),
-          verificacao: {
-            pendente: true,
-            verificacao_id: desafio.verificacao_id,
-            destino_mascarado: desafio.destino_mascarado,
-            metodo: desafio.metodo,
-            expira_em_minutos: desafio.expira_em_minutos,
-            // Somente no protótipo: em produção o código só existe no SMS
-            codigo_simulado: desafio.codigo_simulado,
-          },
-          produto_foco: resolucao.produto_foco, linha: resolucao.linha,
-          score_atrito: sessao.score_atrito, sinais_atrito: [], trechos_memoria: [],
-          intervencao: null, persona,
-        })
-      }
-    }
-
     // ── 12. ClaroMemory + Persona + dados do adaptador ──────────────────────
     const memoria = claroMemory.recuperar(cliente_id, resolucao.produto_foco, intencao)
     const perfil = obterPerfil(cliente_id, mensagem)
@@ -352,6 +364,13 @@ router.post('/mensagem', (req, res) => {
     }
 
     // ── 14. Geração da resposta + sanitização de saída ──────────────────────
+    // O aviso de retomada ("localizei seu protocolo de ontem") é calculado
+    // aqui para sabermos se ele realmente foi usado — só então a sessão é
+    // marcada como já avisada, e o aviso não se repete nos turnos seguintes.
+    const prefixoRetomada = podeAnunciarContinuidade
+      ? llm.prefixoContinuidade({ intencao, contexto: memoria.contexto, memoria, protocolosAbertos })
+      : null
+
     let resposta = llm.gerar({
       intencao: intencaoResposta,
       linha: resolucao.linha,
@@ -364,6 +383,7 @@ router.post('/mensagem', (req, res) => {
       protocolo: protocoloNumero,
       acao: acaoProposta,
       protocolosAbertos,
+      anunciarContinuidade: !!prefixoRetomada,
     })
     resposta = guardrails.sanitizarSaida(adaptarTom(resposta, persona))
 
@@ -386,7 +406,8 @@ router.post('/mensagem', (req, res) => {
 
       entradaFila = fila.entrar({
         sessaoId: sessao.id, clienteId: cliente_id, canal, motivo,
-        scoreAtrito: score, intencao, protocoloNumero,
+        scoreAtrito: score, riscoChurn: churn.percentual, intencao,
+        produtoLinha: resolucao.linha, protocoloNumero,
       })
 
       resposta = guardrails.sanitizarSaida(llm.gerar({
@@ -409,6 +430,12 @@ router.post('/mensagem', (req, res) => {
       )
 
       intencaoResposta = pediuHumano ? 'atendente_humano' : 'transbordo_humano'
+    }
+
+    // O aviso de retomada só conta como "dado" se foi para a resposta que o
+    // cliente realmente recebeu — no transbordo a resposta é outra.
+    if (prefixoRetomada && !entradaFila) {
+      db.prepare(`UPDATE sessoes SET continuidade_anunciada = 1 WHERE id = ?`).run(sessao.id)
     }
 
     // ── 17. Persistência ────────────────────────────────────────────────────

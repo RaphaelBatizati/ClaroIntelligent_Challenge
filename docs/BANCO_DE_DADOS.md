@@ -63,7 +63,9 @@ Uma conversa em um canal. Guarda o estado de curto prazo: produto em foco, se j�
 | `produto_codigo_foco` | TEXT | produto resolvido para esta sessão |
 | `produto_confirmado` | INTEGER | trava a resolução após a 1ª confirmação, evita reperguntar |
 | `score_atrito` | REAL | 0–100, acumulado turno a turno |
-| `status` | TEXT | `ativa` \| `transferida` \| `encerrada` |
+| `status` | TEXT | `ativa` \| `transferida` \| `em_atendimento_humano` \| `encerrada` |
+| `verificado` | INTEGER | 1 após a identificação em duas etapas (só se aplica ao WhatsApp) |
+| `continuidade_anunciada` | INTEGER | 1 depois que o cliente já foi avisado de um protocolo anterior — impede o aviso de se repetir a cada turno |
 | `trace_id` | TEXT | id de rastreio, devolvido em toda resposta da API |
 
 ### `mensagens`
@@ -164,14 +166,18 @@ Estado do transbordo para humano.
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
-| `prioridade` | TEXT | `alta` (score ≥ 80 ou cancelamento) \| `media` \| `baixa` |
+| `prioridade` | TEXT | `alta` (churn ≥ 70, score ≥ 80 ou cancelamento) \| `media` \| `baixa` |
+| `risco_churn` | REAL | 0–100 — **critério de desempate da fila**, dentro da mesma gravidade |
+| `tipo_servico` | TEXT | `financeiro` \| `tecnico` \| `retencao` \| `comercial` \| `consumo` \| `cadastro` \| `geral` |
+| `produto_linha` | TEXT | linha do produto em foco, para roteamento por especialidade |
 | `status` | TEXT | `aguardando` \| `em_atendimento` \| `encerrado` |
 | `atendente_nome` | TEXT | quem assumiu |
 | `resumo_contexto` | TEXT | JSON com persona, produto, sinais e últimas falas — o briefing que evita o cliente repetir |
 | `entrou_em` / `iniciado_em` / `encerrado_em` | TEXT | permitem medir espera e duração |
 
-A **posição na fila não é armazenada**: é calculada na consulta, ordenando por prioridade e depois
-por ordem de chegada. Guardar posição seria denormalizar um dado que muda a cada entrada e saída.
+A **posição na fila não é armazenada**: é calculada na consulta, ordenando por gravidade, depois por
+risco de churn decrescente e só então por ordem de chegada. Guardar posição seria denormalizar um
+dado que muda a cada entrada e saída — e aqui ele muda também quando o churn de alguém sobe.
 
 ### `eventos_seguranca`
 Auditoria dos guardrails e das falhas de 2FA.
@@ -213,7 +219,8 @@ seguinte sem o sistema perder o que estava sendo tratado.
 
 | Tabela | Coluna | Para quê |
 |---|---|---|
-| `sessoes` | `protocolo_numero`, `verificado`, `risco_churn` | vincular protocolo, marcar 2FA validado, guardar o churn calculado |
+| `sessoes` | `protocolo_numero`, `verificado`, `risco_churn`, `continuidade_anunciada` | vincular protocolo, marcar 2FA validado, guardar o churn calculado e lembrar que o aviso de retomada já foi dado (não se repete a cada turno) |
+| `fila_atendimento` | `risco_churn`, `tipo_servico`, `produto_linha` | priorizar por risco de cancelamento e filtrar a fila por especialidade |
 | `clientes` | `tipo_pessoa`, `cnpj_mascara`, `segmento` | suportar cliente PJ (Claro Empresas) |
 | `produtos_catalogo` | `segmento`, `valor_referencia`, `franquia_gb`, `velocidade_mbps`, `tipo_chip`, `beneficios` | descrever o produto real e alimentar a matriz de capacidades |
 | `mensagens` | `protocolo_numero`, `bloqueado_guardrail` | rastrear por protocolo e marcar mensagens bloqueadas |

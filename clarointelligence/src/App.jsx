@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { PeriodoProvider } from './contexts/PeriodoContext'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import MapaAtrito from './pages/MapaAtrito'
@@ -12,7 +13,8 @@ import ConsoleAtendente from './pages/ConsoleAtendente'
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
+      <PeriodoProvider>
+        <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
@@ -29,7 +31,8 @@ function App() {
             </div>
           } />
         </Route>
-      </Routes>
+        </Routes>
+      </PeriodoProvider>
     </BrowserRouter>
   )
 }

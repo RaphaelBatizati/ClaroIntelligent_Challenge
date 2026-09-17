@@ -26,17 +26,53 @@ const CANAL_CONFIG = {
     accentColor: '#25D366', botColor: '#075E54', botAvatar: 'C',
     msgBotBg: '#FFFFFF', msgBotText: '#111', msgUserBg: '#DCF8C6', msgUserText: '#111',
     inputBg: '#fff', fundo: '#ECE5DD',
-    description: 'Atendimento via WhatsApp — exige verificação em duas etapas',
+    description: 'Atendimento via WhatsApp — identifica pelo número e confirma por SMS',
   },
 }
 
+// Roteiros de demonstração. G, H e I são conversas completas, com falas na
+// ordem exata — é o que se usa para gravar o pitch sem improvisar.
 const CLIENTES_ROTEIRO = [
-  { id: 'cli-ana-souza', nome: 'Ana Souza', initials: 'AS', cor: '#3B82F6', roteiro: 'A', titulo: 'Continuidade entre canais', dica: 'Tente: "minha internet está lenta" — e depois troque de canal para ver o ClaroMemory recuperar o contexto' },
-  { id: 'cli-carlos-mota', nome: 'Carlos Mota', initials: 'CM', cor: '#8B5CF6', roteiro: 'B', titulo: 'Desambiguação multiproduto', dica: 'Tente: "quero a segunda via" — ele tem 4 contratos, o sistema vai perguntar qual' },
-  { id: 'cli-fernanda-lima', nome: 'Fernanda Lima', initials: 'FL', cor: '#F59E0B', roteiro: 'C', titulo: 'ClaroSense → fila humana', dica: 'Tente: "já tentei várias vezes" e depois "ISSO É UM ABSURDO, quero falar com humano"' },
-  { id: 'cli-joao-santos', nome: 'João Santos', initials: 'JS', cor: '#10B981', roteiro: 'D', titulo: 'Autoatendimento completo', dica: 'Tente: "quero pagar minha fatura" e confirme — resolve sem atendente' },
-  { id: 'cli-roberto-alves', nome: 'Roberto Alves', initials: 'RA', cor: '#EC4899', roteiro: 'E', titulo: 'Call center → chat (protocolo)', dica: 'Tente: "e aí, tenho que pagar essa conta?" — ele tem protocolo aberto no call center' },
-  { id: 'cli-vega-solucoes', nome: 'Vega Soluções', initials: 'VS', cor: '#0EA5E9', roteiro: 'F', titulo: 'Cliente empresarial (CNPJ)', dica: 'Tente: "o link dedicado está oscilando" — chip empresarial + link dedicado com SLA' },
+  { id: 'cli-ana-souza', nome: 'Ana Souza', initials: 'AS', cor: '#3B82F6', roteiro: 'A', persona: 'intermediario', plano: 'Fibra 500 Mega', titulo: 'Continuidade entre canais', dica: 'Tente: "minha internet está lenta" — e depois troque de canal para ver o ClaroMemory recuperar o contexto' },
+  { id: 'cli-carlos-mota', nome: 'Carlos Mota', initials: 'CM', cor: '#8B5CF6', roteiro: 'B', persona: 'digital', plano: '4 contratos em 3 linhas', titulo: 'Desambiguação multiproduto', dica: 'Tente: "quero a segunda via" — ele tem 4 contratos, o sistema vai perguntar qual' },
+  { id: 'cli-fernanda-lima', nome: 'Fernanda Lima', initials: 'FL', cor: '#F59E0B', roteiro: 'C', persona: 'assistido', plano: 'Fibra 350 Mega', titulo: 'ClaroSense → fila humana', dica: 'Tente: "já tentei várias vezes" e depois "ISSO É UM ABSURDO, quero falar com humano"' },
+  { id: 'cli-joao-santos', nome: 'João Santos', initials: 'JS', cor: '#10B981', roteiro: 'D', persona: 'intermediario', plano: 'Fibra 500 + Max Flex', titulo: 'Autoatendimento completo', dica: 'Tente: "quero pagar minha fatura" e confirme — resolve sem atendente' },
+  { id: 'cli-roberto-alves', nome: 'Roberto Alves', initials: 'RA', cor: '#EC4899', roteiro: 'E', persona: 'informal', plano: 'Controle 40GB', titulo: 'Call center → chat (protocolo)', dica: 'Tente: "e aí, tenho que pagar essa conta?" — ele tem protocolo aberto no call center' },
+  { id: 'cli-vega-solucoes', nome: 'Vega Soluções', initials: 'VS', cor: '#0EA5E9', roteiro: 'F', persona: 'digital', plano: 'Empresarial: 18 chips + link dedicado', titulo: 'Cliente empresarial (CNPJ)', dica: 'Tente: "o link dedicado está oscilando" — chip empresarial + link dedicado com SLA' },
+
+  {
+    id: 'cli-helena-duarte', nome: 'Helena Duarte', initials: 'HD', cor: '#A855F7', roteiro: 'G',
+    persona: 'assistido', plano: 'Fibra 350 Mega (residencial)',
+    titulo: 'Guiada — problema de internet → atendente',
+    dica: 'Conversa completa: o atrito sobe, ela pede uma pessoa, mas não chega ao nível crítico.',
+    script: [
+      'minha internet fica caindo toda hora',
+      'isso é frustrante, já tentei reiniciar o modem várias vezes',
+      'prefiro falar com uma pessoa, por favor',
+    ],
+  },
+  {
+    id: 'cli-tiago-ramos', nome: 'Tiago Ramos', initials: 'TR', cor: '#14B8A6', roteiro: 'H',
+    persona: 'informal', plano: 'Claro Pós 50GB (móvel)',
+    titulo: 'Informal — paga a conta sozinho no chat',
+    dica: 'Conversa completa: resolve tudo no chat, sem fila e sem atendente.',
+    script: [
+      'e aí, quero pagar a conta do meu celular',
+      'isso, pode gerar o pix',
+    ],
+  },
+  {
+    id: 'cli-nexo-log', nome: 'Nexo Log Transportes', initials: 'NL', cor: '#F97316', roteiro: 'I',
+    persona: 'digital', plano: 'Fibra 500 empresarial (CNPJ)',
+    titulo: 'Técnica — erro repetido → transbordo automático',
+    dica: 'Conversa completa: a repetição e o tom elevam o score até a transferência automática.',
+    script: [
+      'o portal empresarial retorna erro CLR-4032 ao emitir a fatura',
+      'continua o mesmo erro, já limpei o cache e troquei de navegador',
+      'de novo isso, é a terceira vez que reporto o erro CLR-4032',
+      'ISSO É INACEITÁVEL, TEMOS SLA CONTRATADO E VOU ACIONAR A ANATEL',
+    ],
+  },
 ]
 
 const PERSONA_INFO = {
@@ -416,7 +452,9 @@ export default function ChatCliente() {
           {canal === 'whatsapp' && (
             <p className="text-[9px] text-amber-600 mt-2 leading-snug bg-amber-50 rounded p-1.5">
               <Shield size={9} className="inline mr-0.5" />
-              Canal com verificação em duas etapas para dados sensíveis
+              Único canal com verificação em duas etapas: o número identifica o cliente e o
+              código de 6 dígitos confirma que é ele. Site, app e call center já têm
+              autenticação própria.
             </p>
           )}
         </div>
@@ -433,6 +471,9 @@ export default function ChatCliente() {
                 <div className="min-w-0 flex-1">
                   <div className="font-semibold truncate">{c.nome}</div>
                   <div className="text-[9px] truncate text-gray-400">Roteiro {c.roteiro} · {c.titulo}</div>
+                  <div className={`text-[9px] truncate ${clienteId === c.id ? 'text-gray-500' : 'text-gray-300'}`}>
+                    {PERSONA_INFO[c.persona]?.label} · {c.plano}
+                  </div>
                 </div>
               </button>
             ))}
@@ -443,6 +484,28 @@ export default function ChatCliente() {
           <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
             <p className="text-[9px] font-bold text-amber-500 uppercase mb-1">Roteiro {clienteAtual.roteiro} — {clienteAtual.titulo}</p>
             <p className="text-[10px] text-amber-700 leading-snug">{clienteAtual.dica}</p>
+
+            {/* Roteiro guiado: as falas na ordem, clicáveis. Evita erro de
+                digitação na hora da apresentação e mantém o tempo da demo. */}
+            {clienteAtual.script && (
+              <div className="mt-2 pt-2 border-t border-amber-200 space-y-1">
+                <p className="text-[9px] font-bold text-amber-500 uppercase">Falas do roteiro</p>
+                {clienteAtual.script.map((fala, i) => {
+                  const enviadas = mensagens.filter(m => m.papel === 'cliente').length
+                  const proxima = i === enviadas
+                  return (
+                    <button key={i} onClick={() => enviarMensagem(fala)} disabled={carregando || !apiOnline}
+                      className={`w-full text-left text-[10px] leading-snug px-2 py-1.5 rounded-lg border transition-all disabled:opacity-50 ${
+                        proxima ? 'bg-white border-amber-300 text-amber-800 font-semibold shadow-sm'
+                          : i < enviadas ? 'bg-amber-100/50 border-transparent text-amber-400 line-through'
+                            : 'bg-white/60 border-transparent text-amber-600'
+                      }`}>
+                      <span className="font-bold mr-1">{i + 1}.</span>{fala}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
 

@@ -37,9 +37,35 @@ Nenhuma rota ou service concatena entrada do usuário em SQL — sempre `db.prep
 
 `POST /api/chat/mensagem` atende site, app e WhatsApp simulados — a diferença de canal é o campo `canal` no corpo da requisição, não uma rota por canal. Isso evita triplicar a lógica de pipeline e mantém a regra "borda com ponto de entrada único e explícito" do desenho de arquitetura.
 
-## KPIs do dashboard combinam dado real com linha de base simulada
+## Volume de demonstração no seed, e não somado nos KPIs
 
-As rotas em [`routes/dashboard.js`](../clarointelligence-api/src/routes/dashboard.js) somam contagens reais do SQLite a números de base fixos/aleatórios (ex. `total.n + 1847`). Isso é deliberado: um painel administrativo vazio logo após `npm run seed` não demonstra nada para a banca. É uma decisão de **demonstração**, documentada aqui e em [API.md](API.md) para não ser confundida com telemetria real de produção.
+Um painel administrativo vazio logo após `npm run seed` não demonstra nada — mas somar uma linha de
+base fixa dentro do endpoint (`total.n + 1847`, como era antes) cria um problema pior: o número
+deixa de responder a filtro nenhum. Foi exatamente o que apareceu quando os filtros de período e de
+canal entraram: os KPIs não se moviam, porque a maior parte deles era constante.
+
+A solução foi mover o volume para onde ele pertence — os **dados**. O seed gera ~560 atendimentos
+determinísticos distribuídos em 30 dias, com canal, jornada, persona, score e sinais coerentes entre
+si ([`seed-extras.js`](../clarointelligence-api/src/seed-extras.js), PRNG com semente fixa). As
+rotas de `routes/dashboard.js` passaram a ser **100% agregação do banco**.
+
+Ganhos: todo filtro passa a funcionar de verdade, os números batem entre telas, e rodar o seed duas
+vezes produz o mesmo painel — o que importa quando se está gravando um pitch.
+
+## Contadores de filtro contam o recorte, não o total
+
+Todo painel de busca com facetas tem a mesma armadilha: exibir "Call Center (81)" numa tela já
+filtrada por WhatsApp, onde nenhum dos 81 aparece. O contador parece informação e é ruído.
+
+A regra adotada, no Mapa de Atrito ([`dashboard.js`](../clarointelligence-api/src/routes/dashboard.js)),
+no Monitor de Conversas ([`conversas.js`](../clarointelligence-api/src/routes/conversas.js)) e na
+fila do Console ([`fila.js`](../clarointelligence-api/src/services/fila.js)): **cada dimensão é
+contada aplicando todos os filtros ativos, menos o dela própria**. O filtro de canal não se filtra a
+si mesmo (senão só haveria uma opção), mas respeita persona, linha, jornada e período.
+
+No Mapa de Atrito isso é ainda mais explícito: o endpoint carrega o recorte uma única vez em
+memória e deriva KPIs, jornadas, sinais, mapa de calor e facetas **do mesmo array**. Não existe
+caminho de código em que um número da tela venha de uma consulta diferente da outra.
 
 ## Guardrails por padrão léxico, não por classificador semântico
 
@@ -62,14 +88,27 @@ adaptadores e do LLM. A alternativa comum (filtrar a saída do modelo) foi desca
 chega ao LLM, a contenção passa a depender do modelo se comportar bem. Bloquear na entrada torna a
 proteção independente do provedor — inclusive quando o LLM simulado for trocado por um real.
 
-## Segundo fator obrigatório no WhatsApp e no Site
+## Segundo fator só no WhatsApp, e na entrada da conversa
 
-No WhatsApp, o "login" é a posse do número. Se o aparelho for clonado ou o número recuperado por um
-terceiro, a conversa inteira é herdada. Por isso o 2FA é exigido nesses canais antes de qualquer
-dado financeiro ou pessoal, mesmo que isso adicione um passo à jornada.
+Duas decisões aqui, e as duas mudaram em relação à primeira versão.
 
-O App Minha Claro é o único canal isento no protótipo, por pressupor sessão autenticada — é a
-mesma lógica que uma operadora aplicaria de fato.
+**Só no WhatsApp.** Site, App e Call Center têm autenticação do próprio canal — login da conta ou
+identificação do atendente. Pedir código nesses canais é fricção sem ganho: o cliente já provou quem
+é. No WhatsApp não existe login; o canal é o número, e posse do número não é prova de identidade
+(aparelho clonado, chip roubado, número recuperado por terceiro). O segundo fator existe para cobrir
+exatamente esse buraco, e não faz sentido fora dele.
+
+**Na entrada, não na intenção sensível.** Antes, o desafio disparava quando a conversa encostava num
+dado financeiro. O problema é o que acontece *antes* disso: o assistente já teria devolvido o
+portfólio do cliente, a persona e — pior — o aviso de que existe um protocolo em aberto no call
+center sobre determinado assunto. Isso é histórico de atendimento de outra pessoa, entregue a quem
+ainda não se identificou. Mover a verificação para o primeiro turno fecha essa janela: no WhatsApp,
+nada do contrato sai antes do código.
+
+O mesmo raciocínio vale para o aviso de retomada de protocolo, que só aparece depois da
+identificação — e **uma única vez por sessão**, controlado por `sessoes.continuidade_anunciada`.
+Repetir "localizei seu protocolo" a cada turno faz o assistente parecer que esqueceu o que acabou de
+dizer.
 
 Detalhes de implementação com peso de segurança: código gerado com `crypto.randomInt`, armazenado
 apenas como hash SHA-256 com salt, comparado com `timingSafeEqual`, expirando em 5 minutos e

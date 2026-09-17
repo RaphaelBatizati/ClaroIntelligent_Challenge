@@ -1,59 +1,31 @@
-import { useState, useEffect } from 'react'
-import { Users, CheckCircle, Star, Zap, TrendingDown, Activity } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Users, CheckCircle, Zap, TrendingDown, Activity, ShieldCheck } from 'lucide-react'
 import { api } from '../services/api'
+import { usePeriodo } from '../contexts/periodo'
 import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
+  ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from 'recharts'
 import KPICard from '../components/KPICard'
 import ChartCard from '../components/ChartCard'
 
-const volumeData = [
-  { s: 'S1', WhatsApp: 8200, App: 6100, Site: 4800, 'Call Center': 12400 },
-  { s: 'S2', WhatsApp: 9100, App: 6800, Site: 5200, 'Call Center': 11800 },
-  { s: 'S3', WhatsApp: 10300, App: 7400, Site: 5600, 'Call Center': 10900 },
-  { s: 'S4', WhatsApp: 11200, App: 8200, Site: 6100, 'Call Center': 9800 },
-  { s: 'S5', WhatsApp: 12100, App: 8900, Site: 6600, 'Call Center': 8600 },
-  { s: 'S6', WhatsApp: 13400, App: 9600, Site: 7200, 'Call Center': 7400 },
-  { s: 'S7', WhatsApp: 14200, App: 10300, Site: 7800, 'Call Center': 6300 },
-]
+// Cada canal tem cor fixa em todas as telas — quem olha o painel todo dia
+// aprende a cor antes de ler a legenda.
+const COR_CANAL = {
+  whatsapp: '#25D366', app: '#3B82F6', site: '#8B5CF6', callcenter: '#E8002A',
+}
+const NOME_CANAL = {
+  whatsapp: 'WhatsApp', app: 'App Minha Claro', site: 'Site', callcenter: 'Call Center',
+}
 
-const distribuicao = [
-  { name: 'WhatsApp', value: 34, color: '#25D366' },
-  { name: 'App Minha Claro', value: 28, color: '#3B82F6' },
-  { name: 'Site/Chat', value: 23, color: '#8B5CF6' },
-  { name: 'Call Center', value: 15, color: '#E8002A' },
-]
+const corTransbordo = (v) => (v >= 20 ? '#EF4444' : v >= 12 ? '#F59E0B' : '#10B981')
 
-const transbordo = [
-  { s: 'S1', taxa: 28 },
-  { s: 'S2', taxa: 24 },
-  { s: 'S3', taxa: 21 },
-  { s: 'S4', taxa: 18 },
-  { s: 'S5', taxa: 14 },
-  { s: 'S6', taxa: 11 },
-  { s: 'S7', taxa: 8 },
-]
-
-const barColor = (v) => (v >= 20 ? '#EF4444' : v >= 12 ? '#F59E0B' : '#10B981')
-
-const CustomTip = ({ active, payload, label }) => {
+const TooltipVolume = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-3 text-xs">
       <p className="font-semibold text-gray-700 mb-1">{label}</p>
-      {payload.map((p) => (
+      {payload.filter(p => p.value > 0).map((p) => (
         <p key={p.dataKey} style={{ color: p.color }}>
           {p.name}: {Number(p.value).toLocaleString('pt-BR')}
         </p>
@@ -63,39 +35,69 @@ const CustomTip = ({ active, payload, label }) => {
 }
 
 function Dashboard() {
+  const { periodo, rotulo } = usePeriodo()
   const [kpis, setKpis] = useState(null)
+  const [volume, setVolume] = useState([])
+  const [canais, setCanais] = useState([])
+  const [transbordo, setTransbordo] = useState([])
+  const [personas, setPersonas] = useState([])
   const [apiStatus, setApiStatus] = useState('checking')
 
-  useEffect(() => {
-    api.health()
-      .then(() => {
-        setApiStatus('online')
-        return api.kpis()
-      })
-      .then(setKpis)
-      .catch(() => setApiStatus('offline'))
-  }, [])
+  const carregar = useCallback(async () => {
+    try {
+      await api.health()
+      setApiStatus('online')
+      const [k, v, c, t, p] = await Promise.all([
+        api.kpis(periodo), api.volume(periodo), api.canais(periodo),
+        api.transbordo(periodo), api.personas(periodo),
+      ])
+      setKpis(k)
+      setVolume(v.serie)
+      setCanais(c)
+      setTransbordo(t.serie)
+      setPersonas(p.filter(x => x.total > 0))
+    } catch {
+      setApiStatus('offline')
+    }
+  }, [periodo])
+
+  useEffect(() => { carregar() }, [carregar])
+
+  const totalCanais = canais.reduce((a, c) => a + c.total, 0)
 
   return (
     <div className="space-y-5">
-      {/* Barra de status API */}
-      <div className={`flex items-center gap-3 px-4 py-2 rounded-xl text-xs font-medium ${apiStatus === 'online' ? 'bg-green-50 text-green-700' : apiStatus === 'offline' ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-400'}`}>
+      {/* Barra de status da API */}
+      <div className={`flex items-center gap-3 px-4 py-2 rounded-xl text-xs font-medium ${
+        apiStatus === 'online' ? 'bg-green-50 text-green-700'
+          : apiStatus === 'offline' ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-400'}`}>
         <Activity size={13} />
-        {apiStatus === 'online' && kpis ? `API ClaroIntelligence conectada • ${kpis.sessoes_ativas} sessão(ões) ativa(s) • ${kpis.total_sessoes?.toLocaleString('pt-BR')} atendimentos totais` : apiStatus === 'offline' ? 'API offline — execute: cd clarointelligence-api && npm run server' : 'Conectando à API…'}
-        {apiStatus === 'online' && <span className="ml-auto flex items-center gap-1"><span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />ao vivo</span>}
+        {apiStatus === 'online' && kpis
+          ? `${rotulo} · ${kpis.total_sessoes.toLocaleString('pt-BR')} atendimento(s) · ${kpis.sessoes_ativas} sessão(ões) ativa(s) · ${kpis.protocolos.toLocaleString('pt-BR')} protocolo(s)`
+          : apiStatus === 'offline' ? 'API offline — execute: cd clarointelligence-api && npm run server'
+            : 'Conectando à API…'}
+        {apiStatus === 'online' && (
+          <span className="ml-auto flex items-center gap-1">
+            <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />dado real do banco
+          </span>
+        )}
       </div>
 
-      {/* Banner */}
-      <div
-        className="rounded-xl p-4 flex items-center gap-4"
-        style={{ background: 'linear-gradient(135deg, #0A1628 0%, #1A3050 100%)' }}
-      >
+      {/* Destaque de contenção */}
+      <div className="rounded-xl p-4 flex items-center gap-4"
+        style={{ background: 'linear-gradient(135deg, #0A1628 0%, #1A3050 100%)' }}>
         <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'rgba(232,0,42,0.2)' }}>
           <TrendingDown size={20} style={{ color: '#E8002A' }} />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-white font-semibold text-sm">Call center com queda de 32% no período</p>
-          <p className="text-white/60 text-xs mt-0.5">Atendimentos migrados para canais digitais via ClaroIntelligence</p>
+          <p className="text-white font-semibold text-sm">
+            {kpis?.contencao_pct !== null && kpis?.contencao_pct !== undefined
+              ? `${kpis.contencao_pct}% das demandas encerradas sem atendente humano`
+              : 'Taxa de contenção'}
+          </p>
+          <p className="text-white/60 text-xs mt-0.5">
+            {rotulo} · transbordo de {kpis?.transbordo_pct ?? 0}% · atrito médio {kpis?.score_atrito_medio ?? 0}/100
+          </p>
         </div>
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg flex-shrink-0" style={{ backgroundColor: 'rgba(16,185,129,0.15)' }}>
           <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
@@ -105,71 +107,110 @@ function Dashboard() {
 
       {/* KPIs */}
       <div className="grid grid-cols-4 gap-4">
-        <KPICard label="Total de Atendimentos" value={kpis ? kpis.total_sessoes.toLocaleString('pt-BR') : '84.320'} numericValue={kpis?.total_sessoes || 84320} delta="+12,3%" deltaType="positive" icon={Users} accentColor="#E8002A" />
-        <KPICard label="First Call Resolution" value={kpis ? kpis.fcr_pct + '%' : '73,4%'} numericValue={kpis?.fcr_pct || 73} delta="+5,2%" deltaType="positive" icon={CheckCircle} accentColor="#10B981" />
-        <KPICard label="CES Médio" value={kpis ? kpis.ces + ' / 7' : '3,8 / 7'} delta="-0,4" deltaType="negative" icon={Star} accentColor="#F59E0B" />
-        <KPICard label="Intervenções ClaroSense" value={kpis ? kpis.intervencoes.toLocaleString('pt-BR') : '2.847'} numericValue={kpis?.intervencoes || 2847} delta="+18,7%" deltaType="positive" icon={Zap} accentColor="#8B5CF6" />
+        <KPICard label="Atendimentos no período" value={(kpis?.total_sessoes ?? 0).toLocaleString('pt-BR')}
+          numericValue={kpis?.total_sessoes} icon={Users} accentColor="#E8002A" subtitle={rotulo} />
+        <KPICard label="Taxa de contenção" value={kpis?.contencao_pct !== null && kpis?.contencao_pct !== undefined ? `${kpis.contencao_pct}%` : '—'}
+          numericValue={kpis?.contencao_pct} icon={CheckCircle} accentColor="#10B981" subtitle="Resolvidos sem humano" />
+        <KPICard label="Risco médio de churn" value={`${kpis?.risco_churn_medio ?? 0}%`}
+          numericValue={kpis?.risco_churn_medio} icon={ShieldCheck} accentColor="#F59E0B" subtitle="Leitura do ClaroSense" />
+        <KPICard label="Intervenções ClaroSense" value={(kpis?.intervencoes ?? 0).toLocaleString('pt-BR')}
+          numericValue={kpis?.intervencoes} icon={Zap} accentColor="#8B5CF6" subtitle="Automáticas no período" />
       </div>
 
-      {/* Charts row 1 */}
+      {/* Volume + distribuição */}
       <div className="grid grid-cols-3 gap-4">
-        <ChartCard title="Volume por Canal" subtitle="Últimas 7 semanas" className="col-span-2">
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={volumeData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-              <XAxis dataKey="s" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} width={35} />
-              <Tooltip content={<CustomTip />} />
-              <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
-              <Line type="monotone" dataKey="WhatsApp" stroke="#25D366" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="App" stroke="#3B82F6" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="Site" stroke="#8B5CF6" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="Call Center" stroke="#E8002A" strokeWidth={2} dot={false} strokeDasharray="5 4" />
-            </LineChart>
-          </ResponsiveContainer>
+        <ChartCard title="Volume por canal" subtitle={rotulo} className="col-span-2">
+          {volume.length > 0 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={volume}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                <XAxis dataKey="rotulo" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} minTickGap={12} />
+                <YAxis tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} width={30} allowDecimals={false} />
+                <Tooltip content={<TooltipVolume />} />
+                <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                {Object.entries(COR_CANAL).map(([chave, cor]) => (
+                  <Line key={chave} type="monotone" dataKey={chave} name={NOME_CANAL[chave]}
+                    stroke={cor} strokeWidth={2} dot={false} />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-xs text-gray-400 text-center py-16">Sem atendimentos neste período.</p>
+          )}
         </ChartCard>
 
-        <ChartCard title="Distribuição por Canal" subtitle="Período atual">
-          <div>
-            <ResponsiveContainer width="100%" height={160}>
-              <PieChart>
-                <Pie data={distribuicao} cx="50%" cy="50%" innerRadius={48} outerRadius={70} dataKey="value" paddingAngle={3}>
-                  {distribuicao.map((d, i) => (
-                    <Cell key={i} fill={d.color} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v) => [`${v}%`]} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-2">
-              {distribuicao.map((d) => (
-                <div key={d.name} className="flex items-center gap-1.5 min-w-0">
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: d.color }} />
-                  <span className="text-[10px] text-gray-500 truncate">{d.name}</span>
-                  <span className="text-[10px] font-semibold text-gray-700 ml-auto">{d.value}%</span>
-                </div>
-              ))}
+        <ChartCard title="Distribuição por canal" subtitle={`${totalCanais.toLocaleString('pt-BR')} atendimento(s)`}>
+          {canais.length > 0 ? (
+            <div>
+              <ResponsiveContainer width="100%" height={160}>
+                <PieChart>
+                  <Pie data={canais} cx="50%" cy="50%" innerRadius={48} outerRadius={70} dataKey="total" paddingAngle={3}>
+                    {canais.map((d) => <Cell key={d.canal} fill={COR_CANAL[d.canal] || '#9CA3AF'} />)}
+                  </Pie>
+                  <Tooltip formatter={(v, _n, item) => [`${v} (${item.payload.pct}%)`, item.payload.rotulo]} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-2">
+                {canais.map((d) => (
+                  <div key={d.canal} className="flex items-center gap-1.5 min-w-0">
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: COR_CANAL[d.canal] }} />
+                    <span className="text-[10px] text-gray-500 truncate">{d.rotulo}</span>
+                    <span className="text-[10px] font-semibold text-gray-700 ml-auto">{d.pct}%</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            <p className="text-xs text-gray-400 text-center py-16">Sem dados.</p>
+          )}
         </ChartCard>
       </div>
 
-      {/* Charts row 2 */}
-      <ChartCard title="Taxa de Transbordo Semana a Semana" subtitle="Redução progressiva — de 28% para 8% com ClaroIntelligence">
-        <ResponsiveContainer width="100%" height={170}>
-          <BarChart data={transbordo} barSize={44}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
-            <XAxis dataKey="s" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} width={35} />
-            <Tooltip formatter={(v) => [`${v}%`, 'Taxa de transbordo']} />
-            <Bar dataKey="taxa" radius={[5, 5, 0, 0]}>
-              {transbordo.map((d, i) => (
-                <Cell key={i} fill={barColor(d.taxa)} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartCard>
+      {/* Transbordo + personas */}
+      <div className="grid grid-cols-3 gap-4">
+        <ChartCard title="Taxa de transbordo" subtitle="% de conversas que precisaram de atendente humano" className="col-span-2">
+          {transbordo.length > 0 ? (
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={transbordo}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+                <XAxis dataKey="rotulo" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} minTickGap={10} />
+                <YAxis tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} width={35} />
+                <Tooltip formatter={(v, _n, item) => [`${v}% (${item.payload.humanos} de ${item.payload.total})`, 'Transbordo']} />
+                <Bar dataKey="taxa" radius={[5, 5, 0, 0]}>
+                  {transbordo.map((d, i) => <Cell key={i} fill={corTransbordo(d.taxa)} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-xs text-gray-400 text-center py-16">Sem atendimentos neste período.</p>
+          )}
+        </ChartCard>
+
+        <ChartCard title="Personas atendidas" subtitle="Perfil de linguagem detectado">
+          {personas.length > 0 ? (
+            <div className="space-y-2.5 pt-1">
+              {personas.map(p => {
+                const maximo = Math.max(...personas.map(x => x.total)) || 1
+                return (
+                  <div key={p.chave}>
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-[11px] font-medium text-gray-700">{p.persona}</span>
+                      <span className="text-[11px] font-bold" style={{ color: p.cor }}>{p.total}</span>
+                    </div>
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${(p.total / maximo) * 100}%`, backgroundColor: p.cor }} />
+                    </div>
+                    <div className="text-[9px] text-gray-400 mt-0.5">atrito médio {p.score_medio}/100</div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400 text-center py-16">Sem dados.</p>
+          )}
+        </ChartCard>
+      </div>
     </div>
   )
 }

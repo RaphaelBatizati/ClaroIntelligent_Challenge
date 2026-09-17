@@ -65,30 +65,48 @@ bastante pode passar pela camada 1. O que sustenta a segurança de verdade não 
 para aquele turno — os contratos daquele cliente — porque não existe caminho de código que leia
 dados de outro titular. O filtro reduz ruído e dá visibilidade; o isolamento é o que garante.
 
-## 2. Verificação em duas etapas (2FA)
+## 2. Verificação em duas etapas — identificação no WhatsApp
 
 Implementada em [`services/verificacao.js`](../clarointelligence-api/src/services/verificacao.js).
 
-**Por que:** no WhatsApp o canal é o próprio número de telefone. Se o aparelho for clonado, roubado
-ou o número recuperado por um terceiro, quem estiver do outro lado herda a identidade da conversa.
-Antes de devolver fatura, código de barras, consumo ou executar ação financeira, o cliente confirma
-um código enviado por um segundo fator.
+**Por que só no WhatsApp:** nos demais canais a autenticação é do próprio canal — login da conta no
+Site e no App, identificação do atendente no Call Center. No WhatsApp não existe login: o canal é o
+**número de telefone**, e o sistema reconhece o cliente pelo MSISDN de origem. Só que posse do
+número não é prova de identidade — aparelho clonado, chip roubado ou número recuperado por um
+terceiro herdam a identidade da conversa. Repetir o segundo fator nos canais autenticados seria
+fricção sem ganho de segurança; exigi-lo no WhatsApp é o mínimo.
+
+**Quando dispara:** na **entrada**, não a cada intenção sensível. A primeira mensagem do cliente no
+WhatsApp já abre o desafio: o número é localizado no cadastro, um código de 6 dígitos sai por SMS
+para o mesmo número, e **nada do contrato é devolvido antes da confirmação** — nem valor de fatura,
+nem consumo, nem o histórico de atendimentos anteriores de outros canais.
 
 | Aspecto | Implementação |
 |---|---|
-| Quando dispara | Intenção sensível (`segunda_via`, `pagamento`, `cancelamento`, `troca_titularidade`, `portabilidade`, `upgrade_plano`, `recarga`, `franquia`) em canal sem autenticação forte (WhatsApp, Site) |
+| Canal | Apenas `whatsapp` (`CANAIS_COM_2FA`) |
+| Gatilho | Primeira mensagem da sessão, antes da resolução de produto |
 | Geração do código | `crypto.randomInt` — gerador criptograficamente seguro, 6 dígitos |
 | Armazenamento | **Só o hash SHA-256 com salt.** O código em texto puro nunca é persistido |
 | Comparação | `crypto.timingSafeEqual` — tempo constante, sem vazamento por timing |
 | Expiração | 5 minutos |
 | Tentativas | Máximo 3; depois o desafio é bloqueado e gera evento de segurança de severidade alta |
-| Escopo | Validação vale pela sessão — não reimplica a cada mensagem |
-| Retomada | Após validar, o pipeline **retoma automaticamente a intenção original** que disparou a verificação |
+| Escopo | Validação vale pela sessão — não se pede código a cada mensagem |
+| Retomada | Após validar, o pipeline **retoma automaticamente a intenção original** que abriu a conversa |
 
 **Limitação explícita do protótipo:** o envio real de SMS está fora de escopo, então o código volta
 no campo `verificacao.codigo_simulado` e a interface o exibe como um "SMS simulado", claramente
 rotulado. **Em produção esse campo deixa de existir** — o código só passa a existir no canal
 externo. Está marcado no código como tal.
+
+### O histórico também espera a identificação
+
+O aviso de retomada ("localizei seu protocolo de ontem no call center") é **informação de
+atendimento anterior**, e por isso obedece à mesma regra: no WhatsApp ele só aparece depois do
+código confirmado. Nos canais autenticados, aparece já no primeiro turno.
+
+E aparece **uma única vez por sessão**: a coluna `sessoes.continuidade_anunciada` registra que o
+cliente já foi avisado. Repetir "localizei seu protocolo" a cada turno, além de poluir a conversa,
+faz o assistente parecer que esqueceu o que acabou de dizer.
 
 ## 3. Prevenção de SQL injection por construção
 
@@ -135,7 +153,7 @@ para produção.
 
 | Limitação | Risco em produção | O que resolveria |
 |---|---|---|
-| **Sem autenticação de sessão nem autorização** | Qualquer um com acesso à rede local chama qualquer endpoint como qualquer `cliente_id`. O 2FA protege dados sensíveis dentro da conversa, mas não substitui login | JWT/OAuth na borda; RBAC real nas rotas do painel (a tela "Perfis de Usuário" é simulação visual dos papéis, não aplica controle) |
+| **Sem autenticação de sessão nem autorização** | Qualquer um com acesso à rede local chama qualquer endpoint como qualquer `cliente_id`. O 2FA protege a identificação no WhatsApp, mas não substitui login | JWT/OAuth na borda; RBAC real nas rotas do painel (a tela "Perfis de Usuário" é simulação visual dos papéis, não aplica controle) |
 | **Console do Atendente sem autenticação** | Qualquer pessoa assumiria uma conversa e falaria como atendente da Claro | Login de operador com papel e trilha de auditoria por atendente |
 | **SQLite local sem criptografia em repouso** | Leitura do arquivo expõe a base (mesmo com CPF mascarado) | Postgres com criptografia em repouso e gestão de chaves |
 | **Salt de verificação com valor padrão** | `VERIFICACAO_SALT` tem fallback no código | Segredo obrigatório vindo de cofre, sem default |

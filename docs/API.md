@@ -156,13 +156,31 @@ Estado consolidado — usado pelo chat para acompanhar a fila em tempo real.
 
 | Método | Rota | Descrição |
 |---|---|---|
-| GET | `/api/fila` | fila ordenada por prioridade e chegada, com métricas. `?status=aguardando\|em_atendimento\|encerrado` |
-| GET | `/api/fila/metricas` | aguardando, em atendimento, prioridade alta, espera média |
+| GET | `/api/fila` | fila ordenada, com métricas e facetas — filtros abaixo |
+| GET | `/api/fila/metricas` | aguardando, em atendimento, prioridade alta, churn médio, espera média |
 | POST | `/api/fila/entrar` | entrada manual (`sessao_id`, `cliente_id`, `canal`, `motivo`, `score_atrito`) |
 | GET | `/api/fila/:id/conversa` | briefing do atendente: cliente, sessão, portfólio, protocolo, sinais e transcrição |
 | PUT | `/api/fila/:id/assumir` | atendente assume (`{ "atendente": "Nome" }`) |
 | POST | `/api/fila/:id/mensagem` | atendente responde ao cliente (`{ "texto": "..." }`) |
 | PUT | `/api/fila/:id/encerrar` | encerra e fecha o protocolo como `atendente_humano` |
+
+### Filtros de `GET /api/fila`
+
+| Filtro | Valores | Para quê |
+|---|---|---|
+| `status` | `aguardando` \| `em_atendimento` \| `encerrado` | estado do atendimento |
+| `gravidade` | `alta` \| `media` \| `baixa` | o quanto o caso está quente |
+| `tipo_servico` | `financeiro` \| `tecnico` \| `retencao` \| `comercial` \| `consumo` \| `cadastro` \| `geral` | especialidade de quem atende |
+| `canal` | `site` \| `app` \| `whatsapp` \| `callcenter` | canal de origem |
+| `churn_min` | número 0–100 | só casos acima de um risco de cancelamento |
+
+Todos passam por allowlist antes de chegar na query. A resposta traz `facetas` (contagem por opção,
+já considerando os demais filtros) e `tipos_servico` (mapa chave → rótulo legível).
+
+**Ordenação:** gravidade primeiro, **risco de churn decrescente** em seguida, e só então ordem de
+chegada. É a regra que faz quem está mais perto de cancelar não esperar atrás de uma dúvida simples
+que chegou um minuto antes. A `prioridade` é derivada na entrada: `alta` se churn ≥ 70, score ≥ 80
+ou intenção de cancelamento; `media` se churn ≥ 40 ou score ≥ 50; `baixa` no resto.
 
 ## Monitor de conversas
 
@@ -195,8 +213,11 @@ Busca com filtros pensados para volume de operação.
 ```
 
 ### `GET /api/conversas/facetas`
-Contadores por dimensão (canal, status, persona, linha, risco e **distribuição por hora do dia**),
-respeitando o recorte de data. Alimenta os contadores de cada botão de filtro.
+Contadores por dimensão (canal, status, persona, linha, risco e **distribuição por hora do dia**).
+
+Aceita **os mesmos filtros** de `GET /api/conversas`, e conta cada dimensão aplicando todos eles
+**menos o da própria dimensão**. É o que mantém o painel honesto: filtrando por WhatsApp, a
+contagem de personas passa a somar exatamente o total filtrado, em vez de repetir o total geral.
 
 | Método | Rota | Descrição |
 |---|---|---|
@@ -234,19 +255,52 @@ respeitando o recorte de data. Alimenta os contadores de cada botão de filtro.
 
 ## Dashboard
 
+**Todas as rotas aceitam `?periodo=`**, com os valores do seletor da Topbar:
+`1h` (última hora) · `1d` · `7d` (padrão) · `30d`. Valor inválido cai no padrão.
+
 | Método | Rota | Descrição |
 |---|---|---|
-| GET | `/api/dashboard/kpis` | KPIs gerais |
-| GET | `/api/dashboard/volume` | volume diário dos últimos 7 dias |
-| GET | `/api/dashboard/atrito` | atrito agregado por jornada |
-| GET | `/api/dashboard/transbordo` | intervenções por tipo |
-| GET | `/api/dashboard/personas` | distribuição por persona |
+| GET | `/api/dashboard/kpis` | atendimentos, ativos, contenção, transbordo, atrito e churn médios |
+| GET | `/api/dashboard/volume` | série temporal por canal; a granularidade acompanha o período (minuto / hora / dia) |
+| GET | `/api/dashboard/canais` | distribuição por canal com percentual e atrito médio |
+| GET | `/api/dashboard/mapa-atrito` | **mapa de atrito completo** — ver abaixo |
+| GET | `/api/dashboard/transbordo` | série da taxa de transbordo por balde de tempo |
+| GET | `/api/dashboard/personas` | atendimentos e atrito médio por persona |
 | GET | `/api/dashboard/contencao` | **taxa de contenção**: resolvidos por IA × por humano, por canal |
 | GET | `/api/dashboard/sinais` | sinais agregados, log recente e clientes em risco de churn |
 
-> As rotas `kpis`, `volume`, `atrito`, `transbordo` e `personas` somam contagem real a uma linha de
-> base simulada, para o painel não aparecer vazio numa instalação nova — decisão documentada em
-> [DECISOES.md](DECISOES.md). **`contencao` e `sinais` são 100% dado real do banco.**
+Todas essas rotas são **100% dado real do banco** — não há linha de base simulada somada à
+contagem. O volume histórico vem do seed (`npm run seed`), que gera ~560 atendimentos determinísticos
+distribuídos em 30 dias.
+
+### `GET /api/dashboard/mapa-atrito`
+
+A unidade de análise é o **protocolo** — é ele que representa uma demanda do cliente, com canal de
+origem, assunto (jornada) e desfecho.
+
+| Filtro | Valores |
+|---|---|
+| `periodo` | `1h` \| `1d` \| `7d` \| `30d` |
+| `canal` | `site` \| `app` \| `whatsapp` \| `callcenter` |
+| `jornada` | o assunto do protocolo, ex.: `Suporte técnico` |
+| `persona` | `digital` \| `intermediario` \| `assistido` \| `informal` |
+| `linha` | `residencial` \| `movel` \| `tv` \| `empresas` |
+
+```json
+{ "periodo": { "chave": "30d", "rotulo": "Últimos 30 dias" },
+  "filtros_aplicados": { "canal": "whatsapp" },
+  "kpis": { "atendimentos": 183, "pontos_atrito": 203, "indice_medio": 34,
+            "taxa_recuperacao": 85, "jornada_critica": { "jornada": "Solicitação de cancelamento", "indice": 71 } },
+  "por_jornada": [{ "jornada": "...", "total": 35, "indice": 48, "em_risco": 6, "transferidos": 4 }],
+  "sinais": [{ "tipo": "repeticao_intencao", "total": 87, "rotulo": "Repetição de intenção", "peso": 22 }],
+  "heatmap": { "canais": [{ "chave": "whatsapp", "rotulo": "WhatsApp" }],
+               "linhas": [{ "jornada": "...", "celulas": [{ "canal": "whatsapp", "total": 35, "indice": 48 }] }] },
+  "facetas": { "canal": {...}, "jornada": {...}, "persona": {...}, "linha": {...} } }
+```
+
+**Garantia de coerência:** todos os números saem do mesmo array filtrado em memória, e cada faceta é
+contada ignorando apenas o próprio filtro. Por isso `por_jornada` e `facetas.persona` sempre somam
+`kpis.atendimentos`, e o mapa de calor só traz colunas de canais que existem no recorte.
 
 ## Clientes
 

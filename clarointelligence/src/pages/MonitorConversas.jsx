@@ -231,9 +231,13 @@ export default function MonitorConversas() {
   const buscar = useCallback(async (f) => {
     setCarregando(true)
     try {
+      // As facetas recebem os MESMOS filtros da busca: o backend conta cada
+      // dimensão ignorando apenas o filtro dela própria, então os contadores
+      // acompanham o recorte em vez de repetir o total do período.
+      const { pagina: _p, limite: _l, ordenar: _o, ...recorte } = f
       const [dados, fac] = await Promise.all([
         api.conversas(f),
-        api.conversaFacetas({ data_inicio: f.data_inicio, data_fim: f.data_fim }),
+        api.conversaFacetas(recorte),
       ])
       setResultado(dados)
       setFacetas(fac)
@@ -408,7 +412,7 @@ export default function MonitorConversas() {
           <span className="text-[11px] text-gray-500">
             {carregando ? 'Buscando…' : (
               <><strong className="text-gray-800">{resultado?.total ?? 0}</strong> conversa(s)
-                {facetas?.total ? <span className="text-gray-400"> de {facetas.total} no período</span> : null}</>
+                {resultado?.total ? <span className="text-gray-400"> · página {resultado.pagina} de {resultado.paginas}</span> : null}</>
             )}
           </span>
           {resultado?.paginas > 1 && (

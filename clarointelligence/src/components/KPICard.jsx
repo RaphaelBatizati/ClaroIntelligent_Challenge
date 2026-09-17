@@ -3,30 +3,38 @@ import { TrendingUp, TrendingDown } from 'lucide-react'
 
 function KPICard({ label, value, numericValue, delta, deltaType, icon: Icon, accentColor = '#E8002A', subtitle }) {
   const [display, setDisplay] = useState(numericValue ? '0' : value)
-  const ran = useRef(false)
+  // Valor de onde a contagem parte. Como os KPIs agora mudam com o filtro de
+  // período, a animação precisa reagir a cada novo valor — e não rodar só na
+  // primeira montagem, o que deixaria o cartão exibindo um número velho.
+  const anterior = useRef(0)
 
   useEffect(() => {
-    if (!numericValue || ran.current) return
-    ran.current = true
-    const duration = 1400
+    if (numericValue === null || numericValue === undefined) {
+      setDisplay(value)
+      return
+    }
+
+    const de = anterior.current
+    const para = numericValue
+    anterior.current = para
+
+    if (de === para) { setDisplay(value); return }
+
+    const duration = 900
     const start = performance.now()
+    let frame
 
     const step = (now) => {
-      const elapsed = now - start
-      const progress = Math.min(elapsed / duration, 1)
+      const progress = Math.min((now - start) / duration, 1)
       const eased = 1 - Math.pow(1 - progress, 3)
-      const current = Math.round(eased * numericValue)
-      setDisplay(current.toLocaleString('pt-BR'))
-      if (progress < 1) requestAnimationFrame(step)
+      setDisplay(Math.round(de + (para - de) * eased).toLocaleString('pt-BR'))
+      if (progress < 1) frame = requestAnimationFrame(step)
       else setDisplay(value)
     }
 
-    requestAnimationFrame(step)
+    frame = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(frame)
   }, [numericValue, value])
-
-  useEffect(() => {
-    if (!numericValue) setDisplay(value)
-  }, [value, numericValue])
 
   const bgAccent = `${accentColor}18`
 

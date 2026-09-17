@@ -88,17 +88,18 @@ Cliente envia mensagem
  6. Abre/recupera o PROTOCOLO (todo contato gera um)
         │
         ▼
- 7. Consulta de protocolo? ──── sim → valida titularidade e devolve a linha do tempo
+ 7. Canal WhatsApp e sessão não identificada?
+        │                    → envia código por SMS e ENCERRA o turno
+        │                      (nada do contrato sai antes da confirmação)
+        ▼
+ 8. Consulta de protocolo? ──── sim → valida titularidade e devolve a linha do tempo
         │
         ▼
- 8. Proposta pendente + confirmação? → EXECUTA a ação e FECHA o protocolo
+ 9. Proposta pendente + confirmação? → EXECUTA a ação e FECHA o protocolo
         │
         ▼
- 9. PRODUCT CONTEXT RESOLVER (cascata de 7 etapas — ver abaixo)
+10. PRODUCT CONTEXT RESOLVER (cascata de 7 etapas — ver abaixo)
         │                       ambíguo? → pergunta e encerra o turno
-        ▼
-10. Intenção sensível em canal sem login forte? → dispara 2FA e encerra o turno
-        │
         ▼
 11. ClaroMemory (contexto) + Persona Engine (tom) + Adaptador (dados do BSS)
         │
@@ -107,7 +108,9 @@ Cliente envia mensagem
         │
         ▼
 13. LLM simulado gera a resposta → sanitização de saída
-        │
+        │                       (aviso de retomada de protocolo entra aqui,
+        │                        só se a sessão estiver identificada e ainda
+        │                        não tiver sido avisada)
         ▼
 14. ClaroSense recalcula score de atrito e risco de churn
         │                       score ≥ 80 ou pediu humano? → entra na FILA
@@ -117,6 +120,12 @@ Cliente envia mensagem
         ▼
 16. [assíncrono] ClaroMemory grava o resumo
 ```
+
+**Por que o 2FA está no passo 7 e não perto do fim:** identificação é condição de entrada, não
+consequência da intenção. Se o desafio só disparasse ao encostar num dado sensível, a conversa já
+teria devolvido portfólio e histórico de outros canais para alguém não identificado. Encerrar o
+turno ali garante que nada do contrato — inclusive o protocolo em aberto no call center — sai antes
+da confirmação.
 
 O diagrama de fluxo de dados está em [`assets/diagramas/fluxo_dados.png`](assets/diagramas/fluxo_dados.png).
 

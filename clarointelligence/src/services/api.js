@@ -32,14 +32,15 @@ export const api = {
   mensagens: (sessaoId) => request(`/api/chat/sessoes/${sessaoId}/mensagens`),
   estadoSessao: (sessaoId) => request(`/api/chat/sessoes/${sessaoId}/estado`),
 
-  // Dashboard
-  kpis: () => request('/api/dashboard/kpis'),
-  volume: () => request('/api/dashboard/volume'),
-  atrito: () => request('/api/dashboard/atrito'),
-  transbordo: () => request('/api/dashboard/transbordo'),
-  personas: () => request('/api/dashboard/personas'),
-  contencao: () => request('/api/dashboard/contencao'),
-  sinais: () => request('/api/dashboard/sinais'),
+  // Dashboard — todos aceitam ?periodo=1h|1d|7d|30d (seletor da Topbar)
+  kpis: (periodo) => request(`/api/dashboard/kpis${qs({ periodo })}`),
+  volume: (periodo) => request(`/api/dashboard/volume${qs({ periodo })}`),
+  canais: (periodo) => request(`/api/dashboard/canais${qs({ periodo })}`),
+  mapaAtrito: (filtros) => request(`/api/dashboard/mapa-atrito${qs(filtros)}`),
+  transbordo: (periodo) => request(`/api/dashboard/transbordo${qs({ periodo })}`),
+  personas: (periodo) => request(`/api/dashboard/personas${qs({ periodo })}`),
+  contencao: (periodo) => request(`/api/dashboard/contencao${qs({ periodo })}`),
+  sinais: (periodo) => request(`/api/dashboard/sinais${qs({ periodo })}`),
 
   // Monitor de conversas
   conversas: (filtros) => request(`/api/conversas${qs(filtros)}`),
@@ -49,7 +50,7 @@ export const api = {
   encerrar: (id) => request(`/api/conversas/${id}/encerrar`, { method: 'PUT' }),
 
   // Fila de atendimento humano
-  fila: (status) => request(`/api/fila${qs({ status })}`),
+  fila: (filtros) => request(`/api/fila${qs(typeof filtros === 'string' ? { status: filtros } : filtros)}`),
   filaMetricas: () => request('/api/fila/metricas'),
   filaConversa: (id) => request(`/api/fila/${id}/conversa`),
   filaAssumir: (id, atendente) => request(`/api/fila/${id}/assumir`, { method: 'PUT', body: JSON.stringify({ atendente }) }),

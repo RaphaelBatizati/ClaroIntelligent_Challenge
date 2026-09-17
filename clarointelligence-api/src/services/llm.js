@@ -238,6 +238,7 @@ function gerar({
   acao,
   protocoloConsultado,
   protocolosAbertos,
+  anunciarContinuidade = false,
 }) {
   const grupo = TEMPLATES[intencao] || TEMPLATES.geral
   const fn = grupo[persona] || grupo.intermediario || grupo[Object.keys(grupo)[0]]
@@ -256,25 +257,41 @@ function gerar({
     protocoloConsultado,
   })
 
-  const prefixos = []
+  const prefixo = anunciarContinuidade
+    ? prefixoContinuidade({ intencao, contexto, memoria, protocolosAbertos })
+    : null
+
+  return prefixo ? `${prefixo}\n\n${resposta}` : resposta
+}
+
+/**
+ * Aviso de retomada de um atendimento anterior.
+ *
+ * É informação de histórico — só aparece depois que a sessão está identificada,
+ * e **uma única vez**: repetir "localizei seu protocolo" a cada turno faz o
+ * assistente parecer que esqueceu o que acabou de dizer. Quem decide se pode
+ * anunciar é o núcleo (chat.js), que guarda o estado na sessão.
+ *
+ * Devolve `null` quando não há nada a retomar.
+ */
+function prefixoContinuidade({ intencao, contexto, memoria, protocolosAbertos }) {
+  if (intencao === 'consulta_protocolo' || intencao === 'continuidade') return null
 
   // Retomada por protocolo aberto em OUTRO canal — a continuidade mais forte:
   // não é "lembro de você", é "seu chamado do call center está aqui".
   const abertoOutroCanal = protocolosAbertos?.find(p => p.outro_canal)
-  if (abertoOutroCanal && intencao !== 'consulta_protocolo' && intencao !== 'continuidade') {
+  if (abertoOutroCanal) {
     const quando = abertoOutroCanal.horasAtras <= 1 ? 'há pouco' : `há ${abertoOutroCanal.horasAtras}h`
-    prefixos.push(
-      `📋 *Localizei seu protocolo **${abertoOutroCanal.numero_formatado}**, aberto ${quando} no **${rotularCanal(abertoOutroCanal.canal_origem)}** sobre "${abertoOutroCanal.assunto}" e ainda em aberto. Vou continuar deste ponto — você não precisa explicar de novo.*`
-    )
-  } else if (intencao !== 'continuidade' && contexto?.multicanal && memoria?.trechos?.length > 0) {
-    const mem = memoria.trechos[0]
-    const mins = mem.minutosAtras
-    prefixos.push(
-      `💡 *Identifico que você nos contatou via ${rotularCanal(mem.canal)} há ${mins < 60 ? mins + ' min' : Math.round(mins / 60) + 'h'}.*${mem.pendencias?.length > 0 ? ` Pendências: ${mem.pendencias.join(', ')}.` : ''}`
-    )
+    return `📋 *Localizei seu protocolo **${abertoOutroCanal.numero_formatado}**, aberto ${quando} no **${rotularCanal(abertoOutroCanal.canal_origem)}** sobre "${abertoOutroCanal.assunto}" e ainda em aberto. Vou continuar deste ponto — você não precisa explicar de novo.*`
   }
 
-  return prefixos.length > 0 ? prefixos.join('\n\n') + '\n\n' + resposta : resposta
+  if (contexto?.multicanal && memoria?.trechos?.length > 0) {
+    const mem = memoria.trechos[0]
+    const mins = mem.minutosAtras
+    return `💡 *Identifico que você nos contatou via ${rotularCanal(mem.canal)} há ${mins < 60 ? mins + ' min' : Math.round(mins / 60) + 'h'}.*${mem.pendencias?.length > 0 ? ` Pendências: ${mem.pendencias.join(', ')}.` : ''}`
+  }
+
+  return null
 }
 
 function rotularCanal(canal) {
@@ -286,4 +303,4 @@ function rotularCanal(canal) {
   }[canal] || canal?.toUpperCase() || 'outro canal'
 }
 
-module.exports = { gerar, rotularCanal, TEMPLATES }
+module.exports = { gerar, prefixoContinuidade, rotularCanal, TEMPLATES }

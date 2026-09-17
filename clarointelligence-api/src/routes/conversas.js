@@ -22,43 +22,48 @@ const STATUS = ['ativa', 'transferida', 'em_atendimento_humano', 'encerrada']
  *          score_min, score_max, risco,
  *          ordenar (recentes|score|duracao), pagina, limite
  */
-router.get('/', (req, res) => {
-  try {
-    const db = getDb()
-    const {
-      busca, canal, status, linha, persona, protocolo,
-      data_inicio, data_fim, hora_inicio, hora_fim,
-      score_min, score_max, risco, ordenar = 'recentes',
-    } = req.query
+/**
+ * Monta a cláusula WHERE a partir dos filtros da query.
+ *
+ * `ignorar` permite excluir UMA dimensão do recorte — é o que faz as facetas
+ * ficarem honestas: a contagem ao lado de "Call Center" considera todos os
+ * outros filtros ativos, mas não o filtro de canal, senão ela só poderia
+ * mostrar o canal já selecionado.
+ */
+function montarFiltros(query, ignorar = null) {
+  const {
+    busca, canal, status, linha, persona, protocolo,
+    data_inicio, data_fim, hora_inicio, hora_fim,
+    score_min, score_max, risco,
+  } = query
 
-    const pagina = Math.max(parseInt(req.query.pagina, 10) || 1, 1)
-    const limite = Math.min(Math.max(parseInt(req.query.limite, 10) || 24, 1), 100)
+  const where = []
+  const params = []
+  const usar = (dim) => ignorar !== dim
 
-    const where = []
-    const params = []
+  if (busca) {
+    const digitos = String(busca).replace(/\D/g, '')
+    where.push(`(c.nome LIKE ? OR s.id LIKE ? OR s.protocolo_numero LIKE ? OR p.nome LIKE ?)`)
+    params.push(`%${busca}%`, `%${busca}%`, `%${digitos || busca}%`, `%${busca}%`)
+  }
+  if (protocolo) {
+    where.push('s.protocolo_numero LIKE ?')
+    params.push(`%${String(protocolo).replace(/\D/g, '')}%`)
+  }
+  if (usar('canal') && canal && CANAIS.includes(canal)) { where.push('s.canal = ?'); params.push(canal) }
+  if (usar('status') && status && STATUS.includes(status)) { where.push('s.status = ?'); params.push(status) }
+  if (usar('linha') && linha) { where.push('p.linha = ?'); params.push(linha) }
+  if (usar('persona') && persona) { where.push('c.perfil_persona = ?'); params.push(persona) }
 
-    if (busca) {
-      const digitos = String(busca).replace(/\D/g, '')
-      where.push(`(c.nome LIKE ? OR s.id LIKE ? OR s.protocolo_numero LIKE ? OR p.nome LIKE ?)`)
-      params.push(`%${busca}%`, `%${busca}%`, `%${digitos || busca}%`, `%${busca}%`)
-    }
-    if (protocolo) {
-      where.push('s.protocolo_numero LIKE ?')
-      params.push(`%${String(protocolo).replace(/\D/g, '')}%`)
-    }
-    if (canal && CANAIS.includes(canal)) { where.push('s.canal = ?'); params.push(canal) }
-    if (status && STATUS.includes(status)) { where.push('s.status = ?'); params.push(status) }
-    if (linha) { where.push('p.linha = ?'); params.push(linha) }
-    if (persona) { where.push('c.perfil_persona = ?'); params.push(persona) }
+  // Data: compara só a parte da data, ignorando o horário
+  if (data_inicio) { where.push('date(s.created_at) >= date(?)'); params.push(data_inicio) }
+  if (data_fim) { where.push('date(s.created_at) <= date(?)'); params.push(data_fim) }
 
-    // Data: compara só a parte da data, ignorando o horário
-    if (data_inicio) { where.push('date(s.created_at) >= date(?)'); params.push(data_inicio) }
-    if (data_fim) { where.push('date(s.created_at) <= date(?)'); params.push(data_fim) }
+  // Hora: faixa do dia (ex.: só o pico das 18h às 20h), independente da data
+  if (hora_inicio) { where.push('time(s.created_at) >= time(?)'); params.push(normalizarHora(hora_inicio)) }
+  if (hora_fim) { where.push('time(s.created_at) <= time(?)'); params.push(normalizarHora(hora_fim)) }
 
-    // Hora: faixa do dia (ex.: só o pico das 18h às 20h), independente da data
-    if (hora_inicio) { where.push('time(s.created_at) >= time(?)'); params.push(normalizarHora(hora_inicio)) }
-    if (hora_fim) { where.push('time(s.created_at) <= time(?)'); params.push(normalizarHora(hora_fim)) }
-
+  if (usar('risco')) {
     if (score_min) { where.push('s.score_atrito >= ?'); params.push(Number(score_min)) }
     if (score_max) { where.push('s.score_atrito <= ?'); params.push(Number(score_max)) }
 
@@ -67,8 +72,28 @@ router.get('/', (req, res) => {
     if (risco === 'alerta') where.push('s.score_atrito >= 40 AND s.score_atrito < 65')
     if (risco === 'risco') where.push('s.score_atrito >= 65 AND s.score_atrito < 80')
     if (risco === 'transbordo') where.push('s.score_atrito >= 80')
+  }
 
-    const clausula = where.length ? `WHERE ${where.join(' AND ')}` : ''
+  return {
+    where,
+    params,
+    clausula: where.length ? `WHERE ${where.join(' AND ')}` : '',
+  }
+}
+
+router.get('/', (req, res) => {
+  try {
+    const db = getDb()
+    const {
+      busca, canal, status, linha, persona, protocolo,
+      data_inicio, data_fim, hora_inicio, hora_fim, risco, ordenar = 'recentes',
+    } = req.query
+
+    const pagina = Math.max(parseInt(req.query.pagina, 10) || 1, 1)
+    const limite = Math.min(Math.max(parseInt(req.query.limite, 10) || 24, 1), 100)
+
+    const { params, clausula } = montarFiltros(req.query)
+
 
     const ordem = {
       recentes: 's.updated_at DESC',
@@ -139,44 +164,49 @@ router.get('/', (req, res) => {
 
 /**
  * Contagens por dimensão — alimentam os contadores de cada botão de filtro.
- * Respeita o recorte de data já aplicado pelo usuário.
+ *
+ * Cada dimensão é contada com TODOS os outros filtros aplicados, menos o dela
+ * própria. Sem isso o painel mente: você filtra WhatsApp e continua vendo
+ * "Call Center (81)" num resultado onde nenhuma das 81 aparece.
  */
 router.get('/facetas', (req, res) => {
   try {
     const db = getDb()
-    const { data_inicio, data_fim } = req.query
-    const where = []
-    const params = []
-    if (data_inicio) { where.push('date(s.created_at) >= date(?)'); params.push(data_inicio) }
-    if (data_fim) { where.push('date(s.created_at) <= date(?)'); params.push(data_fim) }
-    const clausula = where.length ? `WHERE ${where.join(' AND ')}` : ''
 
-    const porCanal = db.prepare(`SELECT s.canal as chave, COUNT(*) as total FROM sessoes s ${clausula} GROUP BY s.canal`).all(...params)
-    const porStatus = db.prepare(`SELECT s.status as chave, COUNT(*) as total FROM sessoes s ${clausula} GROUP BY s.status`).all(...params)
-    const porPersona = db.prepare(`
-      SELECT c.perfil_persona as chave, COUNT(*) as total
-      FROM sessoes s JOIN clientes c ON s.cliente_id = c.id ${clausula} GROUP BY c.perfil_persona
-    `).all(...params)
-    const porLinha = db.prepare(`
-      SELECT p.linha as chave, COUNT(*) as total
-      FROM sessoes s JOIN produtos_catalogo p ON s.produto_codigo_foco = p.codigo ${clausula} GROUP BY p.linha
-    `).all(...params)
-    const porRisco = db.prepare(`
-      SELECT CASE
-        WHEN s.score_atrito >= 80 THEN 'transbordo'
-        WHEN s.score_atrito >= 65 THEN 'risco'
-        WHEN s.score_atrito >= 40 THEN 'alerta'
-        ELSE 'normal' END as chave, COUNT(*) as total
-      FROM sessoes s ${clausula} GROUP BY chave
-    `).all(...params)
+    const base = (clausula) => `
+      FROM sessoes s
+      JOIN clientes c ON s.cliente_id = c.id
+      LEFT JOIN produtos_catalogo p ON s.produto_codigo_foco = p.codigo
+      ${clausula}
+    `
 
-    // Distribuição por hora do dia — mostra o pico de demanda
+    const contar = (dimensao, expressao, extraJoin = '') => {
+      const { params, clausula } = montarFiltros(req.query, dimensao)
+      return db.prepare(`
+        SELECT ${expressao} as chave, COUNT(*) as total
+        ${base(clausula)} ${extraJoin}
+        GROUP BY chave
+      `).all(...params)
+    }
+
+    const porCanal = contar('canal', 's.canal')
+    const porStatus = contar('status', 's.status')
+    const porPersona = contar('persona', 'c.perfil_persona')
+    const porLinha = contar('linha', 'p.linha').filter(r => r.chave)
+    const porRisco = contar('risco', `CASE
+      WHEN s.score_atrito >= 80 THEN 'transbordo'
+      WHEN s.score_atrito >= 65 THEN 'risco'
+      WHEN s.score_atrito >= 40 THEN 'alerta'
+      ELSE 'normal' END`)
+
+    // Distribuição por hora do dia — mostra o pico de demanda dentro do recorte
+    const { params, clausula } = montarFiltros(req.query)
     const porHora = db.prepare(`
       SELECT strftime('%H', s.created_at) as chave, COUNT(*) as total
-      FROM sessoes s ${clausula} GROUP BY chave ORDER BY chave
+      ${base(clausula)} GROUP BY chave ORDER BY chave
     `).all(...params)
 
-    const total = db.prepare(`SELECT COUNT(*) as n FROM sessoes s ${clausula}`).get(...params)
+    const total = db.prepare(`SELECT COUNT(*) as n ${base(clausula)}`).get(...params)
 
     res.json({ total: total.n, canal: porCanal, status: porStatus, persona: porPersona, linha: porLinha, risco: porRisco, hora: porHora })
   } catch (err) {

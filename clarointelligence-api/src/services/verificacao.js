@@ -1,10 +1,15 @@
-// Verificação em duas etapas (2FA) antes de expor dado sensível do contrato.
+// Verificação em duas etapas (2FA) — identificação do cliente no WhatsApp.
 //
-// Motivação: no WhatsApp o canal é o próprio número de telefone. Se o aparelho
-// for clonado, roubado ou o número recuperado por um terceiro, quem estiver do
-// outro lado herda a "identidade" da conversa. Por isso, antes de devolver
-// fatura, código de barras, consumo ou executar ação financeira, o cliente
-// confirma um código enviado por um segundo fator.
+// Motivação: no WhatsApp o canal é o próprio número de telefone. O sistema
+// reconhece o cliente pelo MSISDN de origem, mas posse do número não é prova
+// de identidade: aparelho clonado, chip roubado ou número recuperado por um
+// terceiro herdam a "identidade" da conversa. Por isso, no WhatsApp a sessão
+// começa com a identificação: reconhecido o número, um código de 6 dígitos é
+// enviado por SMS e a conversa só avança depois de confirmado.
+//
+// Nos demais canais (site, app, call center) a autenticação é do próprio canal
+// — login da conta ou identificação do atendente — então o 2FA não se repete
+// aqui: seria fricção sem ganho de segurança.
 //
 // Segurança da implementação:
 //   - o código NUNCA é armazenado em texto puro, só o hash SHA-256 com salt;
@@ -21,7 +26,9 @@ const MAX_TENTATIVAS = 3
 // Em produção viria de variável de ambiente / cofre de segredos.
 const SALT = process.env.VERIFICACAO_SALT || 'clarointelligence-mvp-salt'
 
-// Intenções que tocam dado financeiro ou pessoal e exigem segundo fator.
+// Intenções que tocam dado financeiro ou pessoal. No WhatsApp a identificação
+// acontece na entrada, antes de qualquer uma delas; a lista permanece porque é
+// ela que nomeia o motivo registrado no desafio e na linha do tempo do protocolo.
 const INTENCOES_SENSIVEIS = [
   'segunda_via',
   'pagamento',
@@ -33,20 +40,33 @@ const INTENCOES_SENSIVEIS = [
   'franquia',
 ]
 
-// Canais onde o segundo fator é obrigatório para intenção sensível.
-// WhatsApp: a sessão se apoia só na posse do número.
-// Site: sessão anônima sem login forte no protótipo.
-const CANAIS_COM_2FA = ['whatsapp', 'site']
+// Canal onde o segundo fator é obrigatório: só o WhatsApp.
+// Site, app e call center têm autenticação própria do canal.
+const CANAIS_COM_2FA = ['whatsapp']
 
 /**
  * Decide se este turno exige verificação.
- * Sessão já verificada não pede de novo — a validação vale por sessão.
+ *
+ * No WhatsApp a regra é de ENTRADA, não de intenção: o número identifica o
+ * cliente, o código confirma que é ele. Uma vez validada, a sessão inteira
+ * segue verificada — não se pede código a cada mensagem.
  */
-function exigeVerificacao({ canal, intencao, sessao }) {
-  if (!INTENCOES_SENSIVEIS.includes(intencao)) return false
+function exigeVerificacao({ canal, sessao }) {
   if (!CANAIS_COM_2FA.includes(canal)) return false
   if (sessao?.verificado === 1) return false
   return true
+}
+
+/**
+ * A sessão está identificada o suficiente para receber histórico de
+ * atendimentos anteriores (protocolo em aberto de outro canal, pendências)?
+ *
+ * No WhatsApp isso só vale depois do código confirmado. Nos outros canais a
+ * autenticação do canal já cumpre esse papel.
+ */
+function sessaoIdentificada({ canal, sessao }) {
+  if (!CANAIS_COM_2FA.includes(canal)) return true
+  return sessao?.verificado === 1
 }
 
 function hashCodigo(codigo) {
@@ -202,30 +222,26 @@ function statusSessao(sessaoId) {
   }
 }
 
-/** Mensagem pedindo o código, adaptada à persona do cliente. */
-function mensagemDesafio({ destino, metodo, persona, intencao }) {
+/**
+ * Mensagem de identificação, adaptada à persona.
+ * O texto deixa explícito o que aconteceu: o número foi reconhecido no cadastro
+ * e o código saiu por SMS para o mesmo número — é isso que o cliente vê no
+ * WhatsApp real.
+ */
+function mensagemDesafio({ destino, metodo, persona, nome }) {
   const via = metodo === 'email' ? 'e-mail' : 'SMS'
-  const assunto = {
-    segunda_via: 'ver os dados da sua fatura',
-    pagamento: 'realizar o pagamento',
-    cancelamento: 'tratar o cancelamento',
-    troca_titularidade: 'alterar a titularidade',
-    portabilidade: 'tratar a portabilidade',
-    upgrade_plano: 'alterar seu plano',
-    recarga: 'acessar os dados da sua linha',
-    franquia: 'ver o consumo da sua franquia',
-  }[intencao] || 'acessar os dados do seu contrato'
+  const primeiro = nome ? nome.split(' ')[0] : null
 
   if (persona === 'digital') {
-    return `🔐 **Verificação em duas etapas**\n\nEnviei um código de 6 dígitos por ${via} para **${destino}**. Informe o código para ${assunto}.\n\nValidade: ${TTL_MINUTOS} minutos.`
+    return `🔐 **Identificação — verificação em duas etapas**\n\nNúmero **${destino}** localizado no cadastro Claro. Código de 6 dígitos enviado por ${via} para o mesmo número.\n\nInforme o código para liberar os dados do contrato. Validade: ${TTL_MINUTOS} minutos.`
   }
   if (persona === 'assistido') {
-    return `🔐 Antes de continuar, preciso confirmar que é você mesmo, tá bom? 😊\n\nAcabei de enviar um **código de 6 números** por ${via} para **${destino}**.\n\nPode olhar suas mensagens e digitar esse código aqui pra mim? Assim seus dados ficam protegidos.`
+    return `🔐 Oi${primeiro ? ', ' + primeiro : ''}! Reconheci o seu número aqui no cadastro da Claro 😊\n\nAntes de falar dos seus dados, preciso ter certeza de que é você mesmo. Acabei de mandar um **código de 6 números** por ${via} para o **${destino}**.\n\nPode olhar suas mensagens e digitar esse código aqui pra mim? É rapidinho, e assim seus dados ficam protegidos.`
   }
   if (persona === 'informal') {
-    return `🔐 Antes de te mostrar isso, só confirmar que é você mesmo!\n\nMandei um código de 6 números por ${via} no **${destino}**. Cola ele aqui pra mim 👇`
+    return `🔐 Opa! Achei teu número aqui no cadastro 👍\n\nSó pra confirmar que é você mesmo, mandei um código de 6 números por ${via} no **${destino}**. Cola ele aqui 👇`
   }
-  return `🔐 **Confirmação de segurança**\n\nPara ${assunto}, preciso confirmar sua identidade. Enviei um código de 6 dígitos por ${via} para **${destino}**.\n\nÉ só digitar o código aqui. Ele vale por ${TTL_MINUTOS} minutos. 🔒`
+  return `🔐 **Verificação em duas etapas**\n\nIdentifiquei seu número **${destino}** no cadastro Claro. Para proteger seus dados, enviei um código de 6 dígitos por ${via} para esse mesmo número.\n\nÉ só digitar o código aqui — ele vale por ${TTL_MINUTOS} minutos. 🔒`
 }
 
 /** Detecta se a mensagem do cliente é (só) um código de verificação. */
@@ -238,6 +254,7 @@ function extrairCodigo(texto) {
 
 module.exports = {
   exigeVerificacao,
+  sessaoIdentificada,
   iniciar,
   validar,
   statusSessao,

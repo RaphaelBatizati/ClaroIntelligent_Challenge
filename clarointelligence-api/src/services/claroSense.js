@@ -59,7 +59,10 @@ const AGRESSIVO_REGEX = /\b(merda|porcaria|lixo|droga\s*de|palha[cç]ada|vergonh
 // Frustração sem agressão direta.
 const NEGATIVO_REGEX = /\b(absurdo|horr[ií]vel|p[eé]ssimo|rid[ií]culo|inadmiss[ií]vel|insatisfeit|raiva|aborrecid|frustrad|cansad|irritad|n[aã]o\s*aguento|saco|chateado|revoltado|indignado|v[aá]rias\s*vezes|j[aá]\s*tentei|de\s*novo\s*isso|toda\s*vez)\b/i
 
-const HUMANO_REGEX = /\b(falar\s*com\s*(um\s*)?(humano|atendente|pessoa|gerente|supervisor)|quero\s*(um\s*)?atendente|chamar?\s*(um\s*)?atendente|atendimento\s*humano|me\s*transfere|transferir\s*para\s*(um\s*)?(humano|atendente))\b/i
+// "falar com uma pessoa" é tão pedido de humano quanto "quero um atendente" —
+// o artigo feminino ("uma") precisa entrar, senão o sinal mais importante da
+// régua passa em branco justamente com quem fala de forma mais educada.
+const HUMANO_REGEX = /\b((falar|conversar|atendimento)\s*(com\s*)?(um|uma|umas|uns)?\s*(humano|atendente|pessoa|gerente|supervisor|especialista)|prefiro\s*(falar|um)|quero\s*(um|uma)?\s*(atendente|humano|pessoa)|chamar?\s*(um|uma)?\s*(atendente|pessoa)|atendimento\s*humano|me\s*transfere|transferir\s*para\s*(um|uma)?\s*(humano|atendente|pessoa))\b/i
 
 const CANCELAMENTO_REGEX = /\b(cancel[ao]r?|rescind|encerrar\s*(o\s*)?(plano|contrato)|quero\s*sair|mudar\s*de\s*operadora|portar\s*para|vivo|tim\b|oi\s*fibra)\b/i
 

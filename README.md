@@ -57,8 +57,9 @@ registra se a demanda foi resolvida pela IA ou por uma pessoa.
 ### Segurança
 - **Guardrails em 3 camadas** contra prompt injection, extração de dados e engenharia social — o
   ataque é bloqueado antes de chegar ao resolver, aos adaptadores e ao LLM.
-- **Verificação em duas etapas** antes de qualquer dado financeiro no WhatsApp e no Site, com código
-  hasheado, expiração e limite de tentativas.
+- **Identificação em duas etapas no WhatsApp**: o número reconhece o cliente, um código por SMS
+  confirma que é ele — e nada do contrato sai antes disso. Código hasheado, expiração e limite de
+  tentativas. Nos canais com login (site, app, call center) não há fricção extra.
 - Consultas parametrizadas, CPF nunca em texto puro, rate limit e redação de saída.
 
 ### Atendimento humano de verdade
@@ -75,7 +76,8 @@ de contenção do painel.
 
 | | |
 |---|---|
-| [docs/COMO_RODAR.md](docs/COMO_RODAR.md) | Instalação e os 8 roteiros de demonstração |
+| [docs/COMO_RODAR.md](docs/COMO_RODAR.md) | Instalação e os 11 roteiros de demonstração |
+| [docs/ROTEIRO_PITCH.md](docs/ROTEIRO_PITCH.md) | Roteiro cronometrado de 2min30 para gravar a demo |
 | [docs/ARQUITETURA.md](docs/ARQUITETURA.md) | Camadas, pipeline, protocolo, resolver, motores e fila |
 | [docs/PRODUTOS.md](docs/PRODUTOS.md) | Catálogo real da Claro e matriz de capacidades |
 | [docs/BANCO_DE_DADOS.md](docs/BANCO_DE_DADOS.md) | Esquema completo das tabelas |
@@ -95,8 +97,15 @@ de contenção do painel.
 | D | João Santos | Pagamento e upgrade resolvidos sozinho no chat |
 | E | Roberto Alves | **Call center → chat**, retomada pelo protocolo (persona informal) |
 | F | Vega Soluções | Cliente **PJ**: chip empresarial + link dedicado com SLA |
-| G | qualquer | Verificação em duas etapas no WhatsApp |
-| H | qualquer | Guardrails bloqueando prompt injection |
+| G | Helena Duarte | Persona **guiada** · residencial — precisa de atendente, sem chegar ao crítico |
+| H | Tiago Ramos | Persona **informal** · móvel — paga a conta inteira no chat, sem atendente |
+| I | Nexo Log | Persona **técnica** · empresarial — erro repetido escala até o transbordo automático |
+| J | qualquer | Identificação em duas etapas no WhatsApp |
+| K | qualquer | Guardrails bloqueando prompt injection |
+
+Os roteiros **G, H e I** são conversas completas, com as falas na ordem exata disponíveis como
+botões no painel lateral do chat. O roteiro cronometrado de **2min30** para gravação do pitch está
+em [docs/ROTEIRO_PITCH.md](docs/ROTEIRO_PITCH.md).
 
 ## Stack
 
@@ -107,7 +116,11 @@ de contenção do painel.
 
 ## Telas
 
-Dashboard · Mapa de Atrito · **Monitor de Conversas** (filtros por canal, status, produto, persona,
-faixa de atrito, data, horário e protocolo) · **Log do ClaroSense** (régua de pesos e risco de churn)
-· **Gestão de Personas** (4 personas + dicionário editável) · **Chat do Cliente** · **Console do
-Atendente** · Perfis de Usuário
+**Dashboard** e **Mapa de Atrito** (filtro de período: última hora, 1 dia, 7 e 30 dias) · **Monitor
+de Conversas** (canal, status, produto, persona, faixa de atrito, data, horário e protocolo) · **Log
+do ClaroSense** (régua de pesos e risco de churn) · **Gestão de Personas** (4 personas + dicionário
+editável) · **Chat do Cliente** · **Console do Atendente** (fila filtrável por gravidade, tipo de
+serviço e canal, priorizada por risco de cancelamento) · Perfis de Usuário
+
+Em todas as telas de análise, **os contadores de cada filtro respeitam os demais filtros ativos** —
+filtrar por WhatsApp não deixa "Call Center (81)" na tela de um resultado onde nenhum aparece.

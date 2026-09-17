@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Bell, ChevronDown } from 'lucide-react'
+import { usePeriodo, PERIODOS } from '../contexts/periodo'
 
 const PAGE_TITLES = {
   '/dashboard': 'Dashboard',
@@ -11,16 +12,20 @@ const PAGE_TITLES = {
   '/perfis-usuario': 'Perfis de Usuário',
   '/configuracoes': 'Configurações',
   '/chat': 'Chat do Cliente — Demo Interativo',
+  '/console-atendente': 'Console do Atendente',
 }
 
-const PERIODS = ['Últimos 7 dias', 'Últimos 30 dias', 'Últimos 90 dias']
+// Telas que realmente respondem ao período — nas demais o seletor some, para
+// não sugerir um filtro que não filtra nada.
+const TELAS_COM_PERIODO = ['/dashboard', '/mapa-atrito', '/log-clarosense']
 
 function Topbar() {
   const { pathname } = useLocation()
-  const [period, setPeriod] = useState('Últimos 7 dias')
+  const { periodo, setPeriodo, rotulo } = usePeriodo()
   const [open, setOpen] = useState(false)
 
   const title = PAGE_TITLES[pathname] || 'Dashboard'
+  const mostrarPeriodo = TELAS_COM_PERIODO.includes(pathname)
 
   return (
     <header className="h-14 bg-white border-b border-gray-100 flex items-center px-6 gap-4 flex-shrink-0 z-10"
@@ -35,31 +40,33 @@ function Topbar() {
         <span className="text-[10px] text-gray-400 font-medium">intelligence</span>
       </div>
 
-      {/* Seletor de período */}
-      <div className="relative">
-        <button
-          onClick={() => setOpen((o) => !o)}
-          className="flex items-center gap-2 px-3.5 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs text-gray-700 font-medium transition-colors"
-        >
-          {period}
-          <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
-        </button>
-        {open && (
-          <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 py-1 min-w-[155px]">
-            {PERIODS.map((p) => (
-              <button
-                key={p}
-                onClick={() => { setPeriod(p); setOpen(false) }}
-                className={`w-full text-left px-4 py-2 text-xs transition-colors hover:bg-gray-50 ${
-                  p === period ? 'font-semibold text-[#E8002A]' : 'text-gray-700'
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Seletor de período — aplica a todas as telas de monitoramento */}
+      {mostrarPeriodo && (
+        <div className="relative">
+          <button
+            onClick={() => setOpen((o) => !o)}
+            className="flex items-center gap-2 px-3.5 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg text-xs text-gray-700 font-medium transition-colors"
+          >
+            {rotulo}
+            <ChevronDown size={13} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+          </button>
+          {open && (
+            <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 py-1 min-w-[155px]">
+              {PERIODOS.map((p) => (
+                <button
+                  key={p.chave}
+                  onClick={() => { setPeriodo(p.chave); setOpen(false) }}
+                  className={`w-full text-left px-4 py-2 text-xs transition-colors hover:bg-gray-50 ${
+                    p.chave === periodo ? 'font-semibold text-[#E8002A]' : 'text-gray-700'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Notificações */}
       <button className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors">

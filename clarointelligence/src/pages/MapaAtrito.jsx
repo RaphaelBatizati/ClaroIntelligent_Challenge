@@ -1,178 +1,285 @@
-import { AlertTriangle, TrendingUp, Flame } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { AlertTriangle, TrendingUp, Flame, Filter, X, Inbox, MessageSquare } from 'lucide-react'
 import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Cell,
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
 } from 'recharts'
 import KPICard from '../components/KPICard'
 import ChartCard from '../components/ChartCard'
+import { api } from '../services/api'
+import { usePeriodo } from '../contexts/periodo'
 
-const atritionData = [
-  { jornada: 'Cancelamento', atrito: 55 },
-  { jornada: 'Troca de titularidade', atrito: 42 },
-  { jornada: 'Segunda via', atrito: 38 },
-  { jornada: 'Suporte técnico', atrito: 31 },
-  { jornada: 'Upgrade de plano', atrito: 24 },
-  { jornada: 'Contratação', atrito: 18 },
-]
+const ROTULO_PERSONA = {
+  digital: 'Digital', intermediario: 'Intermediário', assistido: 'Assistido', informal: 'Informal',
+}
+const ROTULO_LINHA = {
+  residencial: 'Residencial', movel: 'Móvel', tv: 'Claro tv+', empresas: 'Empresas', 'sem-produto': 'Sem produto',
+}
+const ROTULO_CANAL = {
+  site: 'Site', app: 'App Minha Claro', whatsapp: 'WhatsApp', callcenter: 'Call Center',
+}
 
-const sinais = [
-  { sinal: 'Repetição de intenção', qtd: 4218, cor: '#EF4444' },
-  { sinal: 'Mudança de canal', qtd: 3102, cor: '#F59E0B' },
-  { sinal: 'Silêncio prolongado', qtd: 2441, cor: '#8B5CF6' },
-  { sinal: 'Respostas monossilábicas', qtd: 1671, cor: '#6B7280' },
-]
-
-const CANAIS = ['WhatsApp', 'App', 'Site', 'Call Center']
-const JORNADAS = ['Cancelamento', 'Troca titularidade', 'Segunda via', 'Suporte técnico', 'Upgrade', 'Contratação']
-
-const HEAT = [
-  [65, 45, 38, 78],
-  [35, 28, 22, 55],
-  [25, 18, 32, 45],
-  [28, 22, 35, 40],
-  [18, 14, 16, 28],
-  [12, 10, 15, 22],
-]
-
-function heatColor(v) {
-  if (v >= 50) return '#FEE2E2'
-  if (v >= 35) return '#FEF3C7'
+function corDoIndice(v) {
+  if (v === null || v === undefined) return '#F9FAFB'
+  if (v >= 65) return '#FEE2E2'
+  if (v >= 40) return '#FEF3C7'
   if (v >= 20) return '#D1FAE5'
   return '#F0FDF4'
 }
-function heatTextColor(v) {
-  if (v >= 50) return '#B91C1C'
-  if (v >= 35) return '#92400E'
+function corDoTexto(v) {
+  if (v === null || v === undefined) return '#D1D5DB'
+  if (v >= 65) return '#B91C1C'
+  if (v >= 40) return '#92400E'
   if (v >= 20) return '#065F46'
   return '#14532D'
 }
-function barColor(v) {
-  if (v >= 40) return '#EF4444'
-  if (v >= 25) return '#F59E0B'
+function corDaBarra(v) {
+  if (v >= 65) return '#EF4444'
+  if (v >= 40) return '#F59E0B'
   return '#10B981'
 }
 
-const CustomTip = ({ active, payload }) => {
+/**
+ * Grupo de filtro em chips.
+ * Cada opção carrega quantos atendimentos existem *com os demais filtros já
+ * aplicados* — quando a contagem é zero a opção some, porque um filtro que
+ * leva a uma tela vazia não deveria ser oferecido.
+ */
+function GrupoFiltro({ titulo, valor, facetas, rotulos, onSelecionar }) {
+  const opcoes = Object.entries(facetas || {})
+    .filter(([, total]) => total > 0)
+    .sort((a, b) => b[1] - a[1])
+
+  if (opcoes.length <= 1 && !valor) return null
+
+  return (
+    <div>
+      <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">{titulo}</div>
+      <div className="flex flex-wrap gap-1.5">
+        {opcoes.map(([chave, total]) => {
+          const ativo = valor === chave
+          return (
+            <button
+              key={chave}
+              onClick={() => onSelecionar(ativo ? null : chave)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all ${
+                ativo
+                  ? 'bg-gray-900 text-white border-gray-900'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+              }`}
+            >
+              <span className="truncate max-w-[180px]">{rotulos?.[chave] || chave}</span>
+              <span className={`text-[10px] font-bold ${ativo ? 'text-white/60' : 'text-gray-400'}`}>{total}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+const TooltipJornada = ({ active, payload }) => {
   if (!active || !payload?.length) return null
+  const d = payload[0].payload
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-3 text-xs">
-      <p className="font-semibold text-gray-700">{payload[0]?.payload?.jornada}</p>
-      <p className="mt-1" style={{ color: barColor(payload[0]?.value) }}>
-        Índice de atrito: {payload[0]?.value}%
-      </p>
+      <p className="font-semibold text-gray-700">{d.jornada}</p>
+      <p className="mt-1" style={{ color: corDaBarra(d.indice) }}>Índice de atrito: {d.indice}</p>
+      <p className="text-gray-500">{d.total} atendimento(s) · {d.transferidos} para humano</p>
     </div>
   )
 }
 
-function MapaAtrito() {
+export default function MapaAtrito() {
+  const { periodo, rotulo } = usePeriodo()
+  const [filtros, setFiltros] = useState({ canal: null, jornada: null, persona: null, linha: null })
+  const [dados, setDados] = useState(null)
+  const [erro, setErro] = useState(null)
+  const [carregando, setCarregando] = useState(true)
+
+  const carregar = useCallback(async () => {
+    setCarregando(true)
+    try {
+      setDados(await api.mapaAtrito({ periodo, ...filtros }))
+      setErro(null)
+    } catch (e) {
+      setErro(e.message)
+    } finally {
+      setCarregando(false)
+    }
+  }, [periodo, filtros])
+
+  useEffect(() => { carregar() }, [carregar])
+
+  const definir = (campo) => (valor) => setFiltros(f => ({ ...f, [campo]: valor }))
+  const limpar = () => setFiltros({ canal: null, jornada: null, persona: null, linha: null })
+  const ativos = Object.entries(filtros).filter(([, v]) => v)
+
+  if (erro) {
+    return (
+      <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3">
+        Falha ao carregar o mapa de atrito: {erro}
+        <div className="text-xs text-red-400 mt-1">Verifique se a API está rodando: <code>cd clarointelligence-api &amp;&amp; npm run server</code></div>
+      </div>
+    )
+  }
+
+  const kpis = dados?.kpis
+  const vazio = dados && kpis.atendimentos === 0
+
   return (
     <div className="space-y-5">
-      {/* KPIs */}
-      <div className="grid grid-cols-3 gap-4">
-        <KPICard label="Pontos de Atrito Detectados" value="11.432" numericValue={11432} delta="-8,3%" deltaType="positive" icon={AlertTriangle} accentColor="#EF4444" />
-        <KPICard label="Taxa de Recuperação" value="84,1%" numericValue={84} delta="+6,1%" deltaType="positive" icon={TrendingUp} accentColor="#10B981" />
-        <KPICard label="Jornada Crítica" value="Cancelamento" icon={Flame} accentColor="#F59E0B" subtitle="Índice de atrito: 55%" />
+      {/* ── Filtros ─────────────────────────────────────────── */}
+      <div className="bg-white rounded-xl p-4 shadow-sm space-y-3">
+        <div className="flex items-center gap-2">
+          <Filter size={13} className="text-gray-400" />
+          <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wide">Recorte da análise</span>
+          <span className="text-[11px] text-gray-400">
+            · {rotulo} · {kpis?.atendimentos ?? '—'} atendimento(s)
+          </span>
+          {ativos.length > 0 && (
+            <button onClick={limpar}
+              className="ml-auto flex items-center gap-1 text-[10px] font-semibold text-gray-500 hover:text-gray-800">
+              <X size={11} /> limpar {ativos.length} filtro(s)
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+          <GrupoFiltro titulo="Canal de origem" valor={filtros.canal} facetas={dados?.facetas?.canal}
+            rotulos={ROTULO_CANAL} onSelecionar={definir('canal')} />
+          <GrupoFiltro titulo="Linha de produto" valor={filtros.linha} facetas={dados?.facetas?.linha}
+            rotulos={ROTULO_LINHA} onSelecionar={definir('linha')} />
+          <GrupoFiltro titulo="Persona" valor={filtros.persona} facetas={dados?.facetas?.persona}
+            rotulos={ROTULO_PERSONA} onSelecionar={definir('persona')} />
+          <GrupoFiltro titulo="Jornada" valor={filtros.jornada} facetas={dados?.facetas?.jornada}
+            onSelecionar={definir('jornada')} />
+        </div>
+
+        <p className="text-[10px] text-gray-400 leading-snug border-t border-gray-100 pt-2">
+          Todo número desta tela vem do mesmo conjunto filtrado: os contadores ao lado de cada opção já
+          consideram os demais filtros, e uma opção sem atendimento correspondente não aparece.
+        </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        {/* Horizontal bar */}
-        <ChartCard title="Índice de Atrito por Jornada" subtitle="Escala 0–100 · Verde &lt;25% · Âmbar 25–40% · Vermelho &gt;40%">
-          <ResponsiveContainer width="100%" height={270}>
-            <BarChart data={atritionData} layout="vertical" barSize={18}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" horizontal={false} />
-              <XAxis type="number" domain={[0, 70]} tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
-              <YAxis type="category" dataKey="jornada" width={145} tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-              <Tooltip content={<CustomTip />} />
-              <Bar dataKey="atrito" radius={[0, 5, 5, 0]}>
-                {atritionData.map((d, i) => (
-                  <Cell key={i} fill={barColor(d.atrito)} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Sinais */}
-        <ChartCard title="Sinais de Atrito Detectados" subtitle="Total acumulado no período">
-          <div className="space-y-3">
-            {sinais.map((s) => (
-              <div key={s.sinal} className="p-3 rounded-xl border border-gray-100 hover:border-gray-200 transition-colors">
-                <div className="flex justify-between items-center mb-1.5">
-                  <span className="text-xs font-medium text-gray-700">{s.sinal}</span>
-                  <span className="text-sm font-bold" style={{ color: s.cor }}>
-                    {s.qtd.toLocaleString('pt-BR')}
-                  </span>
-                </div>
-                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-1000"
-                    style={{ width: `${(s.qtd / 4500) * 100}%`, backgroundColor: s.cor }}
-                  />
-                </div>
-              </div>
-            ))}
+      {vazio ? (
+        <div className="bg-white rounded-xl p-10 text-center">
+          <Inbox size={28} className="mx-auto text-gray-300 mb-2" />
+          <p className="text-sm text-gray-500 font-medium">Nenhum atendimento neste recorte</p>
+          <p className="text-xs text-gray-400 mt-1">Amplie o período na barra superior ou remova um filtro.</p>
+        </div>
+      ) : (
+        <>
+          {/* ── KPIs ────────────────────────────────────────── */}
+          <div className="grid grid-cols-4 gap-4">
+            <KPICard label="Atendimentos no recorte" value={(kpis?.atendimentos ?? 0).toLocaleString('pt-BR')}
+              numericValue={kpis?.atendimentos} icon={MessageSquare} accentColor="#3B82F6" subtitle={rotulo} />
+            <KPICard label="Pontos de atrito detectados" value={(kpis?.pontos_atrito ?? 0).toLocaleString('pt-BR')}
+              numericValue={kpis?.pontos_atrito} icon={AlertTriangle} accentColor="#EF4444"
+              subtitle="Sinais do ClaroSense" />
+            <KPICard label="Índice médio de atrito" value={`${kpis?.indice_medio ?? 0}`}
+              numericValue={kpis?.indice_medio} icon={Flame} accentColor="#F59E0B" subtitle="Escala 0–100" />
+            <KPICard label="Resolvidos sem atendente" value={kpis?.taxa_recuperacao !== null ? `${kpis?.taxa_recuperacao}%` : '—'}
+              numericValue={kpis?.taxa_recuperacao} icon={TrendingUp} accentColor="#10B981"
+              subtitle="Taxa de contenção" />
           </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-            <div className="p-2 rounded-lg" style={{ backgroundColor: '#FEE2E2' }}>
-              <div className="text-xs font-bold" style={{ color: '#B91C1C' }}>Alta</div>
-              <div className="text-[10px] text-red-400">&gt; 40%</div>
-            </div>
-            <div className="p-2 rounded-lg" style={{ backgroundColor: '#FEF3C7' }}>
-              <div className="text-xs font-bold" style={{ color: '#92400E' }}>Média</div>
-              <div className="text-[10px] text-amber-400">25–40%</div>
-            </div>
-            <div className="p-2 rounded-lg" style={{ backgroundColor: '#D1FAE5' }}>
-              <div className="text-xs font-bold" style={{ color: '#065F46' }}>Baixa</div>
-              <div className="text-[10px] text-green-500">&lt; 25%</div>
-            </div>
-          </div>
-        </ChartCard>
-      </div>
+          <div className="grid grid-cols-2 gap-4">
+            {/* ── Índice por jornada ────────────────────────── */}
+            <ChartCard title="Índice de atrito por jornada"
+              subtitle={`Média do score final · ${dados?.por_jornada?.length || 0} jornada(s) no recorte`}>
+              <ResponsiveContainer width="100%" height={Math.max(220, (dados?.por_jornada?.length || 1) * 26)}>
+                <BarChart data={dados?.por_jornada || []} layout="vertical" barSize={14}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" horizontal={false} />
+                  <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="jornada" width={165} tick={{ fontSize: 9, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<TooltipJornada />} cursor={{ fill: '#F9FAFB' }} />
+                  <Bar dataKey="indice" radius={[0, 5, 5, 0]}>
+                    {(dados?.por_jornada || []).map((d, i) => <Cell key={i} fill={corDaBarra(d.indice)} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
 
-      {/* Heat map */}
-      <ChartCard title="Mapa de Calor — Canal × Jornada" subtitle="Intensidade do atrito por cruzamento de canal e jornada">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr>
-                <th className="text-left pb-3 pr-4 text-gray-400 font-medium w-40">Jornada</th>
-                {CANAIS.map((c) => (
-                  <th key={c} className="pb-3 px-2 text-center text-gray-600 font-semibold">{c}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {JORNADAS.map((j, ji) => (
-                <tr key={j}>
-                  <td className="py-1.5 pr-4 text-gray-600 font-medium">{j}</td>
-                  {CANAIS.map((c, ci) => {
-                    const v = HEAT[ji][ci]
+            {/* ── Sinais ────────────────────────────────────── */}
+            <ChartCard title="Sinais de atrito detectados"
+              subtitle="Quantas vezes cada sinal do ClaroSense disparou no recorte">
+              {dados?.sinais?.length > 0 ? (
+                <div className="space-y-2.5">
+                  {dados.sinais.map((s) => {
+                    const maximo = dados.sinais[0].total || 1
                     return (
-                      <td key={c} className="py-1.5 px-2 text-center">
-                        <span
-                          className="inline-flex items-center justify-center w-14 h-8 rounded-lg text-xs font-bold transition-all hover:scale-105 cursor-default"
-                          style={{ backgroundColor: heatColor(v), color: heatTextColor(v) }}
-                        >
-                          {v}%
-                        </span>
-                      </td>
+                      <div key={s.tipo} className="p-2.5 rounded-xl border border-gray-100">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-[11px] font-medium text-gray-700">{s.rotulo}</span>
+                          <span className="text-xs font-bold text-gray-800">
+                            {s.total.toLocaleString('pt-BR')}
+                            <span className="text-[9px] text-gray-400 font-normal ml-1">+{s.peso} cada</span>
+                          </span>
+                        </div>
+                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all duration-700"
+                            style={{ width: `${(s.total / maximo) * 100}%`, backgroundColor: corDaBarra(s.peso * 2) }} />
+                        </div>
+                      </div>
                     )
                   })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </ChartCard>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 py-6 text-center">Nenhum sinal de atrito neste recorte.</p>
+              )}
+
+              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                {[['Alta', '≥ 65', '#FEE2E2', '#B91C1C'], ['Média', '40–64', '#FEF3C7', '#92400E'], ['Baixa', '< 40', '#D1FAE5', '#065F46']].map(([t, f, bg, cor]) => (
+                  <div key={t} className="p-2 rounded-lg" style={{ backgroundColor: bg }}>
+                    <div className="text-xs font-bold" style={{ color: cor }}>{t}</div>
+                    <div className="text-[10px]" style={{ color: cor, opacity: 0.7 }}>{f}</div>
+                  </div>
+                ))}
+              </div>
+            </ChartCard>
+          </div>
+
+          {/* ── Mapa de calor ─────────────────────────────── */}
+          <ChartCard title="Mapa de calor — jornada × canal"
+            subtitle="Índice médio de atrito e volume por cruzamento. Células sem atendimento ficam vazias.">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr>
+                    <th className="text-left pb-3 pr-4 text-gray-400 font-medium w-56">Jornada</th>
+                    {dados?.heatmap?.canais?.map(c => (
+                      <th key={c.chave} className="pb-3 px-2 text-center text-gray-600 font-semibold">{c.rotulo}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {dados?.heatmap?.linhas?.map(linha => (
+                    <tr key={linha.jornada}>
+                      <td className="py-1.5 pr-4 text-gray-600 font-medium">{linha.jornada}</td>
+                      {linha.celulas.map(cel => (
+                        <td key={cel.canal} className="py-1.5 px-2 text-center">
+                          <span
+                            className="inline-flex flex-col items-center justify-center w-16 h-9 rounded-lg transition-all hover:scale-105 cursor-default"
+                            style={{ backgroundColor: corDoIndice(cel.indice), color: corDoTexto(cel.indice) }}
+                            title={cel.total ? `${cel.total} atendimento(s) · índice ${cel.indice}` : 'Sem atendimento neste cruzamento'}
+                          >
+                            <span className="text-xs font-bold leading-none">{cel.indice ?? '—'}</span>
+                            {cel.total > 0 && <span className="text-[8px] opacity-60 leading-none mt-0.5">{cel.total}x</span>}
+                          </span>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </ChartCard>
+        </>
+      )}
+
+      {carregando && !dados && (
+        <div className="text-center text-xs text-gray-400 py-6">Carregando dados do período…</div>
+      )}
     </div>
   )
 }
-
-export default MapaAtrito

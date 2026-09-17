@@ -9,6 +9,7 @@
 const { getDb } = require('./database')
 const { v4: uuidv4 } = require('uuid')
 const { DICIONARIO_PADRAO } = require('./services/personaEngine')
+const extras = require('./seed-extras')
 
 function seed() {
   const db = getDb()
@@ -314,11 +315,11 @@ function seed() {
   // ─── FILA DE ATENDIMENTO ──────────────────────────────────────────────────
   // Fernanda já aguardando: o Console do Atendente abre com caso real na fila.
   db.prepare(`
-    INSERT OR IGNORE INTO fila_atendimento (id, protocolo_numero, sessao_id, cliente_id, canal, motivo, prioridade, score_atrito, status, resumo_contexto, entrou_em)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'aguardando', ?, ?)
+    INSERT OR IGNORE INTO fila_atendimento (id, protocolo_numero, sessao_id, cliente_id, canal, motivo, prioridade, score_atrito, risco_churn, tipo_servico, produto_linha, status, resumo_contexto, entrou_em)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'aguardando', ?, ?)
   `).run(
     uuidv4(), PROTO_FERNANDA, 'ses-fernanda-wpp', 'cli-fernanda-lima', 'whatsapp',
-    'ClaroSense: score de atrito 85/100 (risco de churn 88%)', 'alta', 85,
+    'ClaroSense: score de atrito 85/100 (risco de churn 88%)', 'alta', 85, 88, 'tecnico', 'residencial',
     j({
       cliente: 'Fernanda Lima', persona: 'assistido', canal: 'whatsapp', produto: 'RES-FIB-350',
       intencao: 'suporte_tecnico', score_atrito: 85,
@@ -358,12 +359,24 @@ function seed() {
     insertSeg.run(uuidv4(), sid, cid, canal, tipo, sev, padrao, trecho, acao, quando)
   }
 
+  // ─── COMPLEMENTO: personas de roteiro, fila povoada e 30 dias de histórico ──
+  // Numeração continua a do dia, exatamente como o serviço faz em produção.
+  const proximoSequencial = () => {
+    const row = db.prepare(`SELECT COUNT(*) as n FROM protocolos WHERE numero LIKE ?`).get(`${pre}%`)
+    return `${pre}${String((row?.n || 0) + 1).padStart(6, '0')}`
+  }
+
+  const resumoExtras = extras.popular(db, { produtos, minutosAtras, j, proximoSequencial })
+
   console.log('✅ Seed concluído:')
   console.log(`   • ${produtos.length} produtos (portfólio real Claro: móvel, fibra, tv+, empresas)`)
   console.log(`   • ${clientes.length} clientes (6 PF + 1 PJ) · ${contratos.length} contratos`)
   console.log(`   • ${protocolos.length} protocolos com linha do tempo cross-canal`)
   console.log(`   • ${DICIONARIO_PADRAO.length} termos no dicionário de personas (4 personas)`)
-  console.log(`   • 1 cliente aguardando na fila humana · ${segs.length} eventos de segurança`)
+  console.log(`   • ${segs.length} eventos de segurança (guardrails)`)
+  console.log(`   • ${resumoExtras.personas} personas de roteiro (guiada · informal · técnica)`)
+  console.log(`   • ${1 + resumoExtras.fila} clientes aguardando no Console do Atendente`)
+  console.log(`   • ${resumoExtras.atendimentos_historico} atendimentos históricos em 30 dias (${resumoExtras.clientes_historico} clientes sintéticos)`)
   console.log(`\n   Roteiro E (call center → chat): protocolo ${PROTO_ROBERTO} de Roberto Alves em aberto.`)
 }
 
