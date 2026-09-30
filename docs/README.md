@@ -17,5 +17,5 @@
 ## Outras pastas
 
 - [`briefing/`](briefing/) — o briefing original que guiou a evolução do protótipo até este MVP.
-- [`entregas-academicas/`](entregas-academicas/) — documentos Word/PDF entregues à banca FIAP (Sprint 3 e Sprint 4), com os diagramas de arquitetura em alta resolução, e as entregas das Sprints 1 e 2 em [`entregas-academicas/sprints-anteriores/`](entregas-academicas/sprints-anteriores/).
+- [`entregas-academicas/`](entregas-academicas/) — documentos Word/PDF entregues à banca FIAP (Sprint 3 e Sprint 4), incluindo o **[Registro de melhorias aplicadas](entregas-academicas/ClaroIntelligence_Registro_de_Melhorias.pdf)** (PDF, 16 páginas): o que foi pedido pelos professores e pela Claro, o que foi entregue, onde cada coisa vive no código e como conferir na tela, com os diagramas de arquitetura em alta resolução, e as entregas das Sprints 1 e 2 em [`entregas-academicas/sprints-anteriores/`](entregas-academicas/sprints-anteriores/).
 - [`assets/diagramas/`](assets/diagramas/) — as mesmas imagens de diagrama usadas nos documentos acima, em PNG, referenciadas diretamente pelos arquivos `.md` deste índice.
